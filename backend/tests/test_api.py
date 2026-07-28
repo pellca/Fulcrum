@@ -91,6 +91,31 @@ def test_capacity_heatmap(client):
     assert totals == sorted(totals, reverse=True)
 
 
+def test_global_search(client):
+    client.post("/api/admin/seed")
+
+    result = client.get("/api/search", params={"q": "S166"}).json()
+    types = {r["type"] for r in result["results"]}
+    # S166 appears across the whole graph in the seed
+    assert {"action", "commitment", "topic", "key_date", "workstream", "decision"} <= types
+    assert result["count"] > 5
+
+    # chase notes are searchable and resolve to their parent item
+    chase_hits = client.get("/api/search", params={"q": "data extract"}).json()["results"]
+    chase = next(r for r in chase_hits if r["type"] == "chase")
+    assert chase["title"] == "Collate evidence annexes for S166 pack"
+    assert chase["url"].startswith("/register?open=action-")
+    assert "data extract" in chase["snippet"].lower()
+
+    # people resolve to their 1:1 pack
+    person_hits = client.get("/api/search", params={"q": "sarah"}).json()["results"]
+    assert any(r["type"] == "person" and r["url"].endswith("/pack") for r in person_hits)
+
+    # LIKE wildcards in the query are treated literally, and short queries rejected
+    assert client.get("/api/search", params={"q": "%"}).status_code == 422
+    assert client.get("/api/search", params={"q": "100%"}).json()["count"] == 0
+
+
 def test_planner_csv_import(client):
     client.post("/api/people", json={"name": "Priya Shah"})
     client.post("/api/workstreams", json={"name": "Methodology"})

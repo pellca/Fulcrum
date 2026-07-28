@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { cn } from './ui'
 import { QuickAdd } from './QuickAdd'
+import { GlobalSearch } from './GlobalSearch'
 
 const nav = [
   { to: '/', label: 'Today', icon: Gauge },
@@ -95,7 +96,8 @@ export default function Layout() {
         </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="no-print flex items-center justify-end border-b border-slate-200 bg-white px-5 py-2.5 dark:border-slate-800 dark:bg-slate-900">
+        <header className="no-print flex items-center justify-end gap-3 border-b border-slate-200 bg-white px-5 py-2.5 dark:border-slate-800 dark:bg-slate-900">
+          <GlobalSearch />
           <QuickAdd />
         </header>
         <main className="flex-1 overflow-y-auto p-6">

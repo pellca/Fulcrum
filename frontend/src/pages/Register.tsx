@@ -37,11 +37,12 @@ export default function Register() {
   const [creating, setCreating] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
 
-  // deep links: ?open=action-12 opens a drawer; ?owner=3 pre-filters by owner
+  // deep links: ?open=action-12 opens a drawer; ?owner=3 / ?workstream=2 pre-filter
   useEffect(() => {
     const open = searchParams.get('open')
     const owner = searchParams.get('owner')
-    if (!open && !owner) return
+    const workstream = searchParams.get('workstream')
+    if (!open && !owner && !workstream) return
     if (open) {
       const [kind, rawId] = open.split('-')
       const id = Number(rawId)
@@ -51,7 +52,8 @@ export default function Register() {
         setSelected({ kind: tabKind, id })
       }
     }
-    if (owner) setFilters((f) => ({ ...f, owner_id: owner }))
+    if (owner || workstream)
+      setFilters((f) => ({ ...f, owner_id: owner ?? f.owner_id, workstream_id: workstream ?? f.workstream_id }))
     setSearchParams({}, { replace: true })
   }, [searchParams, setSearchParams])
 
