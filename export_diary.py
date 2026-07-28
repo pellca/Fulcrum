@@ -194,19 +194,43 @@ def _ensure_aware(dt):
     return dt
 
 
-def get_diary_events_from_outlook(mailbox, window_from, window_to, include_body):
+def _attach_to_outlook():
+    """Attach to the already-running desktop Outlook, preferring early binding.
+
+    gencache.EnsureDispatch generates static proxy classes with the DISPIDs baked
+    in, so each property read in the pull loop is a straight Invoke instead of a
+    per-object type-info lookup plus name->DISPID resolution. On a loop that
+    reads a dozen properties per appointment that is the difference between one
+    and several RPC-adjacent operations per read.
+
+    Early binding is best-effort: gencache writes generated modules under
+    %TEMP%\\gen_py, which can be blocked by policy or left stale by an Outlook
+    upgrade. Any failure there falls back to plain late-bound Dispatch, which is
+    slower but always works. We NEVER call .Quit() on the returned application.
+    """
+    import win32com.client  # noqa: import here so the module loads on Linux
+
+    try:
+        from win32com.client import gencache
+        return gencache.EnsureDispatch("Outlook.Application")
+    except Exception:  # noqa: BLE001 - unwritable/stale gen_py, policy, etc.
+        return win32com.client.Dispatch("Outlook.Application")
+
+
+def get_diary_events_from_outlook(mailbox, window_from, window_to, include_body,
+                                  existing_by_id=None):
     """Attach to running Outlook, resolve the shared calendar, expand recurrences
     inside [window_from, window_to], and return a list of plain diary event dicts.
 
     Mirrors Get-DiaryEventsFromOutlook. pywin32 is imported here (lazily) so this
     module imports cleanly on non-Windows platforms for testing.
-    """
-    # win32com.client.Dispatch("Outlook.Application") attaches to the already
-    # running single-instance desktop Outlook; we NEVER call .Quit() on it.
-    import win32com.client  # noqa: import here so the module loads on Linux
 
+    existing_by_id (id -> event dict, from the previous diary.json) enables the
+    unchanged fast path in the pull loop; pass None/{} to read every property of
+    every item, which is what --full-resync effectively does.
+    """
     try:
-        outlook = win32com.client.Dispatch("Outlook.Application")
+        outlook = _attach_to_outlook()
     except Exception as ex:  # noqa: BLE001
         raise RuntimeError(
             "Could not attach to Outlook. Ensure the desktop Outlook client is "
@@ -244,6 +268,8 @@ def get_diary_events_from_outlook(mailbox, window_from, window_to, include_body)
     restricted = items.Restrict(filter_str)
 
     results = []
+    if existing_by_id is None:
+        existing_by_id = {}
 
     # Never use .Count / indexing on an IncludeRecurrences collection -- iterate
     # GetFirst()/GetNext() and hard-break once Start passes the window end.
@@ -255,6 +281,33 @@ def get_diary_events_from_outlook(mailbox, window_from, window_to, include_body)
             del item
             break
 
+        # ---- unchanged fast path ----
+        # Read only the four properties needed to identify the occurrence and
+        # decide whether it changed. When an existing active event has the same
+        # id and the same lastModified, Merge-DiaryEvents pass 1 keeps the
+        # EXISTING dict verbatim (diary_merge.py: "merged.append(ex)") and throws
+        # away everything else we would read here -- Body included. So we hand
+        # that same existing object straight back and skip ~9 RPCs per item.
+        #
+        # Reusing `ex` (rather than a copy) is what makes this exactly
+        # equivalent: pass 1 then compares ex against itself and counts it
+        # unchanged, and pass 2 still finds the id in the pull, so it is never
+        # mistaken for a deletion. MeetingStatus is part of the test because a
+        # cancelled pull takes a different branch even when lastModified matches.
+        s_gid = item.GlobalAppointmentID
+        s_lm = _ensure_aware(item.LastModificationTime)
+        s_ms = item.MeetingStatus
+
+        ex = existing_by_id.get("%s|%s" % (s_gid, diary_merge.iso_utc(s_start)))
+        if (ex is not None
+                and s_ms != 5 and s_ms != 7
+                and ex.get("status") == "active"
+                and ex.get("lastModified") == diary_merge.iso_utc(s_lm)):
+            results.append(ex)
+            item = restricted.GetNext()
+            continue
+
+        # ---- full read (new, changed, cancelled or reactivated occurrence) ----
         # Each property access is an RPC -- read ONLY what we need, once each.
         s_subject = item.Subject
         s_end = _ensure_aware(item.End)
@@ -264,9 +317,6 @@ def get_diary_events_from_outlook(mailbox, window_from, window_to, include_body)
         s_opt = item.OptionalAttendees
         s_loc = item.Location
         s_cat = item.Categories
-        s_gid = item.GlobalAppointmentID
-        s_lm = _ensure_aware(item.LastModificationTime)
-        s_ms = item.MeetingStatus
         s_rec = item.IsRecurring
         s_body = None
         if include_body:
@@ -314,7 +364,15 @@ def run_export(mailbox, days_ahead, from_str, to_str, out_file, include_body,
     else:
         existing = read_existing_diary(out_file)
 
-    pulled = get_diary_events_from_outlook(mailbox, window_from, window_to, include_body)
+    # Index by id so the pull can skip the expensive property reads for events
+    # it can prove are unchanged. Empty under --full-resync, which disables the
+    # fast path and forces a full read of every occurrence.
+    existing_by_id = {}
+    for e in existing:
+        existing_by_id[e["id"]] = e
+
+    pulled = get_diary_events_from_outlook(mailbox, window_from, window_to,
+                                           include_body, existing_by_id)
 
     now_utc = datetime.now().astimezone()
     merged, counts = diary_merge.merge_events(

@@ -174,6 +174,88 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(0, counts["unchanged"], "full resync has no carry-over")
 
 
+class StartDatePreFilterTests(unittest.TestCase):
+    """The pass-2 startDate pre-filter must not change any merge outcome.
+
+    It only exists to skip two ISO parses per historic event, so every case here
+    asserts the same result the parse path produces.
+    """
+
+    def _with_start_date(self, event):
+        event["startDate"] = event["start"][:10]
+        return event
+
+    def test_out_of_window_startdate_still_not_cancelled(self):
+        existing = [self._with_start_date(
+            new_test_event("A", OUT_WINDOW_START, status="active"))]
+        events, counts = _merge(existing, [])
+        self.assertEqual(0, counts["cancelled"], "pre-filtered event not cancelled")
+        self.assertEqual("active", events[0]["status"], "pre-filtered event stays active")
+
+    def test_in_window_startdate_still_cancelled(self):
+        existing = [self._with_start_date(
+            new_test_event("A", IN_WINDOW_START, end=IN_WINDOW_START, status="active"))]
+        events, counts = _merge(existing, [])
+        self.assertEqual(1, counts["cancelled"], "in-window absence still cancelled")
+        self.assertEqual(NOW_ISO, events[0]["cancelledAt"], "cancelledAt still stamped")
+
+    def test_startdate_on_window_edge_is_not_pre_filtered(self):
+        # A local startDate one day outside the UTC bounds can still be
+        # in-window once the offset is applied, so the slack band must keep it.
+        edge = new_test_event("A", "2026-07-01T00:30:00+00:00",
+                              end="2026-07-01T01:00:00+00:00", status="active")
+        edge["startDate"] = "2026-06-30"  # deliberately a day behind the start
+        events, counts = _merge([edge], [])
+        self.assertEqual(1, counts["cancelled"], "edge event not wrongly pre-filtered")
+
+    def test_missing_or_bad_startdate_falls_back_to_parsing(self):
+        no_key = new_test_event("A", IN_WINDOW_START, end=IN_WINDOW_START)
+        bad_type = new_test_event("B", IN_WINDOW_START, end=IN_WINDOW_START)
+        bad_type["startDate"] = 20260710  # not a string
+        events, counts = _merge([no_key, bad_type], [])
+        self.assertEqual(2, counts["cancelled"], "both still resolved via the parse path")
+
+    def test_helper_bounds(self):
+        f = diary_merge._definitely_outside_window
+        self.assertTrue(f({"startDate": "2026-06-01"}, "2026-06-30", "2026-08-31"))
+        self.assertTrue(f({"startDate": "2026-09-30"}, "2026-06-30", "2026-08-31"))
+        self.assertFalse(f({"startDate": "2026-07-10"}, "2026-06-30", "2026-08-31"))
+        self.assertFalse(f({}, "2026-06-30", "2026-08-31"), "missing key -> parse path")
+        self.assertFalse(f({"startDate": ""}, "2026-06-30", "2026-08-31"), "empty -> parse path")
+
+
+class UnchangedFastPathTests(unittest.TestCase):
+    """The COM pull's fast path hands the EXISTING dict back as the pulled event.
+
+    These assert merge_events treats that self-referential case exactly like a
+    full read of an unchanged event.
+    """
+
+    def test_same_object_in_pull_counts_unchanged(self):
+        ex = new_test_event("A", IN_WINDOW_START, end=IN_WINDOW_START,
+                            subject="ORIGINAL")
+        events, counts = _merge([ex], [ex])  # same object, as the fast path does
+        self.assertEqual(1, counts["unchanged"], "self-referential pull is unchanged")
+        self.assertEqual(0, counts["added"], "not counted as added")
+        self.assertEqual(0, counts["cancelled"], "not mistaken for a deletion")
+        self.assertEqual(1, len(events), "no duplicate emitted")
+        self.assertIs(ex, events[0], "existing object preserved")
+        self.assertEqual("ORIGINAL", events[0]["subject"], "content untouched")
+
+    def test_fast_path_result_matches_full_read(self):
+        # Same event, once via the fast path (existing object reused) and once
+        # via a full read (an equal but distinct dict). Outcomes must match.
+        ex_fast = new_test_event("A", IN_WINDOW_START, end=IN_WINDOW_START)
+        fast_events, fast_counts = _merge([ex_fast], [ex_fast])
+
+        ex_full = new_test_event("A", IN_WINDOW_START, end=IN_WINDOW_START)
+        pulled_full = new_test_event("A", IN_WINDOW_START, end=IN_WINDOW_START)
+        full_events, full_counts = _merge([ex_full], [pulled_full])
+
+        self.assertEqual(full_counts, fast_counts, "identical counts")
+        self.assertEqual(full_events, fast_events, "identical event output")
+
+
 class BuildEventTests(unittest.TestCase):
 
     def test_all_day_event_field_shape(self):

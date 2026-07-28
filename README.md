@@ -108,8 +108,13 @@ python export_diary.py --self-test
 | `--from` `--to`  | (none)           | Explicit range override (supply **both** or neither).          |
 | `--out-file`     | `./diary.json`   | Output JSON path (written atomically; directory auto-created).  |
 | `--include-body` | off              | Adds a `description` field (plain text, capped at 2000 chars). |
-| `--full-resync`  | off              | Ignore existing file; rebuild the window from scratch.         |
+| `--full-resync`  | off              | **Turns the merge off**: ignore the existing file and rebuild the window from scratch. See [Incremental merge rules](#incremental-merge-rules). |
 | `--self-test`    | off              | Run merge-logic tests, exit 0 (pass) / 1 (fail).               |
+
+There is no `--merge` switch: merging is the default and only behaviour. Every
+run reads the existing `diary.json`, pulls the window fresh, and reconciles the
+two — see [Incremental merge rules](#incremental-merge-rules). `--full-resync`
+is the only way to opt out.
 
 Exit codes: `2` for usage errors (missing `--mailbox`, `--from`/`--to` mismatch),
 `1` for runtime failures (Outlook not attachable, mailbox not resolved, shared
@@ -139,7 +144,8 @@ schtasks /Create /TN "OutlookDiary" /SC MINUTE /MO 15 /TR "python.exe \"C:\Tools
 ```
 
 Each run does a small, bounded COM query and an incremental merge, so it stays
-fast even at high frequency.
+fast even at high frequency — a refresh where nothing has changed skips most of
+the per-appointment COM reads entirely (see [Performance](#performance-python-implementation)).
 
 ---
 
@@ -214,6 +220,50 @@ downstream reader never sees a torn file. Encoding is UTF-8 without BOM.
 
 ---
 
+## Performance (Python implementation)
+
+Essentially all runtime is **COM round-trips**: every property read on an
+appointment is a cross-process call, and for a delegate mailbox it may cross the
+network to Exchange rather than hit a local OST. JSON parsing, merging, sorting
+and writing are noise by comparison. `export_diary.py` therefore optimises for
+one thing — fewer property reads.
+
+**Unchanged events skip most of their property reads.** The pull loop reads only
+`Start`, `GlobalAppointmentID`, `LastModificationTime` and `MeetingStatus` first
+and builds the `id`. If that matches an existing **active** event with an
+identical `lastModified`, the merge is going to keep the existing entry verbatim
+anyway, so the remaining ~9 reads — `Body` included — are skipped and the
+existing entry is reused directly. On a steady-state refresh, where most of the
+window is unchanged, this cuts roughly 13 reads per event to 4. The saving is
+largest with `--include-body`, because `Body` is the most expensive property and
+is exactly what the merge would have discarded.
+
+This is output-identical to reading everything: `--full-resync` passes no
+existing events, so the fast path never fires, and a changed, cancelled or
+reactivated occurrence always takes the full read.
+
+**Early binding where available.** The tool attaches via
+`gencache.EnsureDispatch`, which generates static proxies with the DISPIDs baked
+in, so each property read skips the per-object type-info lookup that late binding
+performs. This is best-effort: `gencache` writes generated modules under
+`%TEMP%\gen_py`, which policy can block and an Outlook upgrade can leave stale.
+Any failure silently falls back to late-bound `Dispatch` — slower, but always
+works, and needs no action from you. If you want to force a regeneration after an
+Outlook upgrade, delete the `gen_py` folder.
+
+**Merge cost stays flat as history accumulates.** `diary.json` grows forever
+(cancellations are tombstoned, never deleted), so the merge avoids parsing
+timestamps for historic events: a plain `startDate` string comparison against the
+window bounds settles most of them without parsing anything.
+
+Two things deliberately *not* done, since both would change behaviour:
+`Items.GetTable()` (much faster, but a MAPI table cannot expand recurrences, so
+it is incompatible with `IncludeRecurrences`), and restricting the pull by
+`LastModificationTime` (would break deletion detection — the merge would see the
+unmodified majority missing from the pull and wrongly cancel it).
+
+---
+
 ## Testing
 
 The pure merge/diff and conversion logic (`diary_merge.py`) has **no COM
@@ -228,6 +278,13 @@ python export_diary.py --self-test        :: same tests on the target box
 `diary_merge.py` imports cleanly on Linux/macOS/Windows (stdlib only), and
 `export_diary.py` imports pywin32 **lazily** (only when it actually reaches
 Outlook), so both modules import — and the tests run — anywhere.
+
+The suite also pins the equivalence the [performance](#performance-python-implementation)
+work depends on: that reusing an existing entry (the unchanged fast path) merges
+identically to a full property read, and that the `startDate` pre-filter never
+changes a merge outcome. The COM layer itself is not unit-tested — it needs a
+real Outlook — so verify a change there with one live run and a diff of
+`diary.json` before and after.
 
 ---
 
@@ -272,6 +329,12 @@ still look off, verify the window bounds printed at the top of the run.
 only works where `$ExecutionContext.SessionState.LanguageMode` is `FullLanguage`
 (Constrained Language Mode blocks its COM calls — use the Python tool instead
 there). It produces the **identical** `diary.json`.
+
+It does not carry the Python tool's COM optimisations (see
+[Performance](#performance-python-implementation)) — it reads every property of
+every appointment on every run — so it is slower on large windows. Output is
+unaffected: the optimisations change only which properties are fetched, never
+what is written.
 
 Pre-flight:
 

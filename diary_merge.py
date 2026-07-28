@@ -14,7 +14,7 @@ the other:
   * field ORDER of an event dict            : identical to the PS [ordered] object
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +164,20 @@ def _parse_offset_to_utc(value):
     return parsed.astimezone(timezone.utc)
 
 
+def _definitely_outside_window(event, from_date_str, to_date_str):
+    """True when the event's startDate alone proves it cannot be in the window.
+
+    A pure string comparison against the (day-widened) window bounds, used to
+    avoid two ISO parses per historic event in merge pass 2. Conservative by
+    design: returns False whenever startDate is missing or not a plain string,
+    so hand-edited / older-schema files simply fall back to parsing.
+    """
+    start_date = event.get("startDate")
+    if not isinstance(start_date, str) or not start_date:
+        return False
+    return start_date < from_date_str or start_date > to_date_str
+
+
 def merge_events(existing, pulled, window_from, window_to, now_utc):
     """Pure incremental merge. Mirrors Merge-DiaryEvents.
 
@@ -185,6 +199,12 @@ def merge_events(existing, pulled, window_from, window_to, now_utc):
     now_iso = iso_utc(now_utc)
     from_utc = window_from.astimezone(timezone.utc) if window_from.tzinfo else window_from.replace(tzinfo=timezone.utc)
     to_utc = window_to.astimezone(timezone.utc) if window_to.tzinfo else window_to.replace(tzinfo=timezone.utc)
+
+    # Cheap pre-filter bounds for pass 2 (see _definitely_outside_window). One
+    # day of slack on each side covers every real UTC offset (max +14:00/-12:00),
+    # so a local startDate outside these bounds cannot possibly be in-window.
+    from_date_str = (from_utc - timedelta(days=1)).strftime("%Y-%m-%d")
+    to_date_str = (to_utc + timedelta(days=1)).strftime("%Y-%m-%d")
 
     existing_by_id = {}
     for e in existing:
@@ -242,14 +262,19 @@ def merge_events(existing, pulled, window_from, window_to, now_utc):
         # ([Start] >= from AND [End] <= to). An event whose start is inside but
         # whose end extends past windowTo is NOT in the pull, so its absence
         # proves nothing -- treating it as in-window would falsely cancel it.
+        #
+        # Parsing two ISO strings per event is the only cost here that grows
+        # with the accumulated history in diary.json, so skip both parses when
+        # the event's plain startDate already proves it is out of window.
         in_window = False
-        start_utc = _parse_offset_to_utc(e.get("start"))
-        if start_utc is not None:
-            end_utc = _parse_offset_to_utc(e.get("end"))
-            if end_utc is None:
-                end_utc = start_utc
-            if start_utc >= from_utc and end_utc <= to_utc:
-                in_window = True
+        if not _definitely_outside_window(e, from_date_str, to_date_str):
+            start_utc = _parse_offset_to_utc(e.get("start"))
+            if start_utc is not None:
+                end_utc = _parse_offset_to_utc(e.get("end"))
+                if end_utc is None:
+                    end_utc = start_utc
+                if start_utc >= from_utc and end_utc <= to_utc:
+                    in_window = True
 
         if e.get("status") == "active" and in_window:
             # was active, sits inside the refreshed window, but vanished from
