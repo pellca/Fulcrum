@@ -6,12 +6,21 @@ import {
   BellRing,
   CalendarClock,
   CheckCircle2,
+  FileDown,
   Flag,
   Landmark,
   Lightbulb,
 } from 'lucide-react'
 import { api, type ChaseQueueItem, type DashboardSummary, type DashItem } from '../api'
 import { Badge, Button, Card, EmptyState, fmtDate, fmtDateTime, PageHeader, priorityTone, Spinner, StatusBadge } from '../components/ui'
+import { RiskChainsCard } from '../components/RiskChains'
+
+function exportPdf() {
+  const original = document.title
+  document.title = `Fulcrum brief ${new Date().toISOString().slice(0, 10)}`
+  window.print()
+  document.title = original
+}
 
 function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
   const tones: Record<string, string> = {
@@ -77,7 +86,7 @@ function ChaseRow({ item }: { item: ChaseQueueItem }) {
           )}
         </div>
       </div>
-      <div className="flex shrink-0 gap-1">
+      <div className="no-print flex shrink-0 gap-1">
         <Button size="sm" variant="secondary" onClick={() => chased.mutate(2)} title="Chased — remind me again in 2 days">
           +2d
         </Button>
@@ -100,20 +109,34 @@ export default function Dashboard() {
   const overdue = [...data.overdue_commitments.map((c) => ({ ...c, kind: 'commitment' as const })), ...data.overdue_actions.map((a) => ({ ...a, kind: 'action' as const }))]
   const dueSoon = [...data.due_soon_commitments.map((c) => ({ ...c, kind: 'commitment' as const })), ...data.due_soon_actions.map((a) => ({ ...a, kind: 'action' as const }))]
 
+  const todayLong = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+
   return (
-    <div>
-      <PageHeader
-        title="Today"
-        subtitle={new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-      />
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="dashboard-print">
+      {/* print-only brief header */}
+      <div className="mb-4 hidden border-b-2 border-slate-800 pb-2 print:block">
+        <h1 className="text-xl font-bold">Fulcrum — daily brief</h1>
+        <p className="text-sm text-slate-600">{todayLong}</p>
+      </div>
+      <div className="print:hidden">
+        <PageHeader
+          title="Today"
+          subtitle={todayLong}
+          actions={
+            <Button variant="secondary" onClick={exportPdf} title="Opens the print dialog — choose 'Save as PDF' for a clean daily brief">
+              <FileDown size={15} /> Export PDF
+            </Button>
+          }
+        />
+      </div>
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4 print:grid-cols-4">
         <Stat label="Overdue items" value={overdue.length} tone="red" />
         <Stat label="Due in 7 days" value={dueSoon.length} tone="amber" />
         <Stat label="Chases due" value={data.chase_queue.length} tone="blue" />
         <Stat label="Decisions waiting" value={data.decision_ready.length} tone="indigo" />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-2 print:grid-cols-2 print:gap-3">
         <div className="space-y-4">
           <Card title={<span className="flex items-center gap-1.5"><BellRing size={14} /> Chase queue</span>}>
             {data.chase_queue.length === 0 ? (
@@ -233,6 +256,8 @@ export default function Dashboard() {
           </Card>
         </div>
       </div>
+
+      <RiskChainsCard className="mt-4" />
     </div>
   )
 }

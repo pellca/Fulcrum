@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..services.copilot_prompt import build_prompt
 from ..services.planner_import import (
     TEMPLATES,
     commit_import,
@@ -31,12 +32,18 @@ async def planner_preview(file: UploadFile, db: Session = Depends(get_db)):
 
 class CommitIn(BaseModel):
     items: list[dict]
+    default_meeting_id: int | None = None
 
 
 @router.post("/planner/commit")
 def planner_commit(body: CommitIn, db: Session = Depends(get_db)):
-    created = commit_import(db, body.items)
+    created = commit_import(db, body.items, body.default_meeting_id)
     return {"created": created}
+
+
+@router.get("/copilot-prompt", response_class=PlainTextResponse)
+def copilot_prompt(db: Session = Depends(get_db)):
+    return build_prompt(db)
 
 
 @router.get("/templates/{name}", response_class=PlainTextResponse)

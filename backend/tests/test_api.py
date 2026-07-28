@@ -69,14 +69,59 @@ def test_planner_csv_import(client):
     assert preview["items"][1]["owner_matched"] is False
 
     result = client.post("/api/imports/planner/commit", json={"items": preview["items"]}).json()
-    assert result["created"] == 2
+    assert result["created"]["actions"] == 2
     actions = client.get("/api/actions").json()
     assert any(a["title"] == "Draft pilot plan" and a["due_date"] == "2026-08-15" for a in actions)
 
 
+def test_copilot_csv_with_types_and_meeting_links(client):
+    client.post("/api/people", json={"name": "Sarah Chen"})
+    forum_id = client.post("/api/forums", json={"name": "AET Weekly"}).json()["id"]
+    meeting_id = client.post(
+        "/api/meetings", json={"forum_id": forum_id, "scheduled_at": "2026-08-03T10:00:00"}
+    ).json()["id"]
+
+    csv_content = (
+        "type,title,description,owner,workstream,due,priority,origin,meeting\n"
+        'commitment,Deliver scope pack,"Asked by CAE, urgent",Sarah Chen,,2026-08-10,high,principal,AET Weekly 2026-08-03\n'
+        "action,Book walkthrough,,Sarah Chen,,2026-08-05,medium,,\n"
+    )
+    preview = client.post(
+        "/api/imports/planner/preview",
+        files={"file": ("copilot.csv", csv_content, "text/csv")},
+    ).json()
+    assert preview["items"][0]["type"] == "commitment"
+    assert preview["items"][0]["origin"] == "principal"
+    assert preview["items"][0]["meeting_id"] == meeting_id
+    assert preview["items"][0]["meeting_matched"] is True
+    assert preview["items"][1]["type"] == "action"
+
+    # second row has no meeting column value -> default_meeting_id applies
+    result = client.post(
+        "/api/imports/planner/commit",
+        json={"items": preview["items"], "default_meeting_id": meeting_id},
+    ).json()
+    assert result["created"] == {"actions": 1, "commitments": 1, "meeting_links": 2}
+
+    commitment = client.get("/api/commitments").json()[0]
+    links = client.get(f"/api/links/for/commitment/{commitment['id']}").json()
+    assert any(l["from_type"] == "meeting" and l["from_id"] == meeting_id for l in links)
+
+
+def test_copilot_prompt_contains_live_context(client):
+    client.post("/api/people", json={"name": "Lena Kovacs"})
+    client.post("/api/workstreams", json={"name": "S166 Response"})
+    client.post("/api/forums", json={"name": "Audit Committee Prep"})
+    prompt = client.get("/api/imports/copilot-prompt").text
+    assert "type,title,description,owner,workstream,due,priority,origin,meeting" in prompt
+    assert "Lena Kovacs" in prompt
+    assert "S166 Response" in prompt
+    assert "Audit Committee Prep" in prompt
+
+
 def test_templates_and_modules(client):
     template = client.get("/api/imports/templates/actions")
-    assert template.status_code == 200 and template.text.startswith("title,")
+    assert template.status_code == 200 and template.text.startswith("type,title,")
     assert client.get("/api/imports/templates/nope").status_code == 404
 
     modules = client.get("/api/modules").json()

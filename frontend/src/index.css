@@ -33,8 +33,24 @@ body {
   .no-print {
     display: none !important;
   }
-  body {
+  html,
+  body,
+  #root {
+    height: auto !important;
     background: white !important;
+  }
+  main {
+    overflow: visible !important;
+    padding: 0.5rem !important;
+  }
+  /* cards: keep together on a page, drop heavy chrome */
+  .dashboard-print .rounded-xl {
+    break-inside: avoid;
+    box-shadow: none !important;
+  }
+  a {
+    text-decoration: none !important;
+    color: inherit !important;
   }
 }
 

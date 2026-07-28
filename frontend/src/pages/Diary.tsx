@@ -29,8 +29,8 @@ export default function Diary() {
     queryFn: () => api.get<DiaryEvent[]>('/diary/events'),
   })
   const { data: meetings = [] } = useQuery({
-    queryKey: ['meetings', false],
-    queryFn: () => api.get<Meeting[]>('/meetings?upcoming_only=true'),
+    queryKey: ['meetings', 'all'],
+    queryFn: () => api.get<Meeting[]>('/meetings'),
   })
   const { data: unmatched = [] } = useQuery({
     queryKey: ['unmatched-attendees'],
@@ -53,25 +53,39 @@ export default function Diary() {
     onError: (e: Error) => toast.error(e.message),
   })
 
+  // diary events linked to a Fulcrum meeting take the forum's colour and name
+  const meetingByEventId = new Map(
+    meetings.filter((m) => m.diary_event_id).map((m) => [m.diary_event_id as string, m]),
+  )
   const calendarEvents = [
-    ...events.map((event) => ({
-      id: event.id,
-      title: event.subject ?? '(no subject)',
-      start: event.start ?? undefined,
-      end: event.end ?? undefined,
-      allDay: event.is_all_day,
-      backgroundColor: '#64748b',
-      borderColor: '#64748b',
-      extendedProps: { kind: 'diary' },
-    })),
-    ...meetings.map((meeting) => ({
-      id: `meeting-${meeting.id}`,
-      title: `◆ ${meeting.forum.name}`,
-      start: meeting.scheduled_at,
-      backgroundColor: meeting.forum.colour,
-      borderColor: meeting.forum.colour,
-      extendedProps: { kind: 'meeting' },
-    })),
+    ...events.map((event) => {
+      const linked = meetingByEventId.get(event.id)
+      const linkedTitle =
+        linked && event.subject?.toLowerCase() !== linked.forum.name.toLowerCase()
+          ? `◆ ${linked.forum.name} · ${event.subject ?? ''}`
+          : `◆ ${linked?.forum.name ?? ''}`
+      return {
+        id: event.id,
+        title: linked ? linkedTitle : (event.subject ?? '(no subject)'),
+        start: event.start ?? undefined,
+        end: event.end ?? undefined,
+        allDay: event.is_all_day,
+        backgroundColor: linked ? linked.forum.colour : '#64748b',
+        borderColor: linked ? linked.forum.colour : '#64748b',
+        extendedProps: { kind: 'diary' },
+      }
+    }),
+    // meetings with no diary link still shown as floating markers
+    ...meetings
+      .filter((meeting) => !meeting.diary_event_id)
+      .map((meeting) => ({
+        id: `meeting-${meeting.id}`,
+        title: `◆ ${meeting.forum.name} (not in diary)`,
+        start: meeting.scheduled_at,
+        backgroundColor: meeting.forum.colour,
+        borderColor: meeting.forum.colour,
+        extendedProps: { kind: 'meeting' },
+      })),
   ]
 
   return (

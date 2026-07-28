@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Plus } from 'lucide-react'
+import { CopyCopilotPromptButton, ImportCsvButton } from '../components/CsvImport'
 import { api, type Action, type Commitment, type Person, type Workstream } from '../api'
 import {
   Badge,
@@ -33,6 +35,21 @@ export default function Register() {
   const [filters, setFilters] = useState({ status: '', owner_id: '', workstream_id: '', origin: '', openOnly: true })
   const [selected, setSelected] = useState<{ kind: Tab; id: number } | null>(null)
   const [creating, setCreating] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // deep link: /register?open=action-12 or ?open=commitment-3 opens the drawer directly
+  useEffect(() => {
+    const open = searchParams.get('open')
+    if (!open) return
+    const [kind, rawId] = open.split('-')
+    const id = Number(rawId)
+    if ((kind === 'action' || kind === 'commitment') && id) {
+      const tabKind: Tab = kind === 'action' ? 'actions' : 'commitments'
+      setTab(tabKind)
+      setSelected({ kind: tabKind, id })
+    }
+    setSearchParams({}, { replace: true })
+  }, [searchParams, setSearchParams])
 
   const { data: people = [] } = useQuery({ queryKey: ['people'], queryFn: () => api.get<Person[]>('/people') })
   const { data: workstreams = [] } = useQuery({ queryKey: ['workstreams'], queryFn: () => api.get<Workstream[]>('/workstreams') })
@@ -67,9 +84,13 @@ export default function Register() {
         title="Register"
         subtitle="Every action and commitment, who owns it, and when it lands"
         actions={
-          <Button onClick={() => setCreating(true)}>
-            <Plus size={15} /> New {tab === 'actions' ? 'action' : 'commitment'}
-          </Button>
+          <>
+            <CopyCopilotPromptButton />
+            <ImportCsvButton />
+            <Button onClick={() => setCreating(true)}>
+              <Plus size={15} /> New {tab === 'actions' ? 'action' : 'commitment'}
+            </Button>
+          </>
         }
       />
 

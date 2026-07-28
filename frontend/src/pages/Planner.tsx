@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, Flag, Plus } from 'lucide-react'
-import { api, type KeyDate, type RiskChain, type TimelineData, type Workstream } from '../api'
+import { Flag, Plus } from 'lucide-react'
+import { api, type KeyDate, type TimelineData, type Workstream } from '../api'
+import { RiskChainsCard } from '../components/RiskChains'
 import {
   Badge,
   Button,
@@ -33,10 +34,6 @@ export default function Planner() {
   const { data: timeline, isLoading } = useQuery({
     queryKey: ['timeline', weeks],
     queryFn: () => api.get<TimelineData>(`/planner/timeline?weeks=${weeks}`),
-  })
-  const { data: risks = [] } = useQuery({
-    queryKey: ['risks'],
-    queryFn: () => api.get<RiskChain[]>('/planner/risks'),
   })
   const { data: workstreams = [] } = useQuery({ queryKey: ['workstreams'], queryFn: () => api.get<Workstream[]>('/workstreams') })
 
@@ -141,24 +138,7 @@ export default function Planner() {
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <Card title={<span className="flex items-center gap-1.5"><AlertTriangle size={14} className="text-amber-500" /> Dependency risk chains</span>}>
-          {risks.length === 0 ? (
-            <EmptyState title="No downstream risk detected" hint="Link items with blocks/precedes and Fulcrum flags everything downstream of anything late, blocked, or at risk." />
-          ) : (
-            <div className="space-y-2">
-              {risks.map((risk, index) => (
-                <div key={index} className="rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2 text-xs dark:border-amber-900/60 dark:bg-amber-950/20">
-                  <span className="font-semibold">{risk.item_title}</span>
-                  <span className="text-slate-500"> ({risk.item_type.replace('_', ' ')}) is exposed — </span>
-                  <span className="font-medium text-amber-700 dark:text-amber-400">{risk.cause_title}</span>
-                  <span className="text-slate-500"> is {risk.cause_reason}</span>
-                  {risk.chain_length > 1 && <Badge tone="amber" className="ml-1.5">{risk.chain_length} steps up the chain</Badge>}
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-
+        <RiskChainsCard />
         <LookAhead timeline={timeline} />
       </div>
 
