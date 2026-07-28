@@ -180,10 +180,10 @@ export default function Register() {
       )}
 
       {selected?.kind === 'actions' && (
-        <ActionDrawer id={selected.id} onClose={() => setSelected(null)} people={people} workstreams={workstreams} />
+        <ActionDrawer key={selected.id} id={selected.id} onClose={() => setSelected(null)} people={people} workstreams={workstreams} />
       )}
       {selected?.kind === 'commitments' && (
-        <CommitmentDrawer id={selected.id} onClose={() => setSelected(null)} people={people} workstreams={workstreams} />
+        <CommitmentDrawer key={selected.id} id={selected.id} onClose={() => setSelected(null)} people={people} workstreams={workstreams} />
       )}
       <CreateModal open={creating} onClose={() => setCreating(false)} kind={tab} people={people} workstreams={workstreams} />
     </div>
@@ -288,6 +288,15 @@ function ActionDrawer({ id, onClose, people, workstreams }: { id: number; onClos
   if (!item) return null
   return (
     <Drawer open onClose={onClose} title={item.title}>
+      <Field label="Title">
+        <Input
+          defaultValue={item.title}
+          onBlur={(e) => {
+            const value = e.target.value.trim()
+            if (value && value !== item.title) patch.mutate({ title: value })
+          }}
+        />
+      </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Status">
           <Select value={item.status} onChange={(e) => patch.mutate({ status: e.target.value })}>
@@ -386,6 +395,15 @@ function CommitmentDrawer({ id, onClose, people, workstreams }: { id: number; on
   if (!item) return null
   return (
     <Drawer open onClose={onClose} title={item.title}>
+      <Field label="Title">
+        <Input
+          defaultValue={item.title}
+          onBlur={(e) => {
+            const value = e.target.value.trim()
+            if (value && value !== item.title) patch.mutate({ title: value })
+          }}
+        />
+      </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Status">
           <Select value={item.status} onChange={(e) => patch.mutate({ status: e.target.value })}>
