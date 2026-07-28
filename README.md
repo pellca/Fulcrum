@@ -171,7 +171,7 @@ Everything below attaches through the existing seams (REST API, module registry,
 
 | Feature | What it does | Value | Effort | Cost |
 |---|---|---|---|---|
-| **Global search (Ctrl+/)** | Full-text across actions, commitments, topics, decisions, diary, chase notes. | ★★ | S–M | free |
+| **Global search (Ctrl+/)** ✅ *shipped* | Full-text across actions, commitments, topics, decisions, diary, chase notes. | ★★ | S–M | free |
 | **Item history / audit trail** | What changed and when on every item — evidence-grade record keeping, fitting for an audit function. | ★★ | M | free |
 | **Notifications** | Local scheduled task fires Windows toasts / digest emails for chases due and hard deadlines approaching. | ★★ | M | free |
 | **Automated versioned backups** | Snapshot `fulcrum.db` on every launch, keep N days — recover from anything. | ★★ | S | free |
