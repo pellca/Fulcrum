@@ -1,0 +1,71 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-slate-300 dark:bg-slate-700;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+  }
+}
+
+/* FullCalendar theming */
+.fc {
+  --fc-border-color: var(--color-slate-200);
+  --fc-page-bg-color: transparent;
+  --fc-today-bg-color: var(--color-indigo-50);
+  font-size: 0.85rem;
+}
+.dark .fc {
+  --fc-border-color: var(--color-slate-800);
+  --fc-today-bg-color: rgb(49 46 129 / 0.25);
+}
+.fc .fc-toolbar-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.fc .fc-button {
+  border: 0 !important;
+  box-shadow: none !important;
+  background: var(--color-slate-200) !important;
+  color: var(--color-slate-700) !important;
+  font-size: 0.8rem;
+  text-transform: capitalize;
+}
+.dark .fc .fc-button {
+  background: var(--color-slate-800) !important;
+  color: var(--color-slate-200) !important;
+}
+.fc .fc-button-active {
+  background: var(--color-indigo-600) !important;
+  color: white !important;
+}

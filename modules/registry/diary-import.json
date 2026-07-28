@@ -1,0 +1,15 @@
+{
+  "name": "diary-import",
+  "label": "Diary import",
+  "description": "Ingest a diary.json produced by the Outlook Diary Extractor (transfer the file from the corporate machine first).",
+  "platform": "any",
+  "builtin": "diary_import",
+  "args": [
+    {
+      "name": "path",
+      "label": "Path to diary.json",
+      "required": true,
+      "default": "data/imports/diary.json"
+    }
+  ]
+}

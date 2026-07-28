@@ -1,0 +1,91 @@
+def test_full_lifecycle(client):
+    # seed demo data
+    seeded = client.post("/api/admin/seed").json()
+    assert seeded["commitments"] >= 4
+
+    # dashboard aggregates
+    summary = client.get("/api/dashboard/summary").json()
+    assert summary["chase_queue"], "seed should produce chases due"
+    assert summary["meetings"], "seed should produce upcoming meetings"
+
+    # agenda flow: candidates -> add top candidate -> capacity respected in payload
+    meeting_id = summary["meetings"][0]["id"]
+    candidates = client.get(f"/api/meetings/{meeting_id}/candidates").json()
+    assert candidates[0]["score"] >= candidates[-1]["score"]
+    top = candidates[0]["topic"]
+    meeting = client.post(f"/api/meetings/{meeting_id}/agenda", json={"topic_id": top["id"]}).json()
+    assert len(meeting["agenda_items"]) == 1
+    assert meeting["agenda_items"][0]["allocated_minutes"] == top["duration_minutes"]
+    # topic no longer a candidate
+    remaining = client.get(f"/api/meetings/{meeting_id}/candidates").json()
+    assert all(c["topic"]["id"] != top["id"] for c in remaining)
+
+    # duplicate add rejected
+    assert client.post(f"/api/meetings/{meeting_id}/agenda", json={"topic_id": top["id"]}).status_code == 409
+
+    # quickadd creates a real action
+    created = client.post("/api/quickadd", json={"text": "Test the thing @sarah due:+3", "type": "action"}).json()
+    action = client.get(f"/api/actions/{created['id']}").json()
+    assert action["owner"]["name"] == "Sarah Chen"
+
+    # risk chains exist (seed has a blocked action upstream of a commitment)
+    risks = client.get("/api/planner/risks").json()
+    assert any(r["cause_reason"] == "blocked" for r in risks)
+
+    # timeline has lanes and meetings
+    timeline = client.get("/api/planner/timeline?weeks=8").json()
+    assert timeline["lanes"] and timeline["meetings"]
+
+    # clearing demo keeps the real quickadd action, then full clear resets schema
+    client.post("/api/admin/clear", json={"scope": "demo", "confirm": "CLEAR"})
+    assert client.get(f"/api/actions/{created['id']}").status_code == 200
+    assert client.get("/api/commitments").json() == []
+
+    assert client.post("/api/admin/clear", json={"scope": "all", "confirm": "nope"}).status_code == 422
+    client.post("/api/admin/clear", json={"scope": "all", "confirm": "CLEAR"})
+    assert client.get("/api/actions").json() == []
+    # schema intact after full clear
+    assert client.post("/api/people", json={"name": "New Person"}).status_code == 201
+
+
+def test_planner_csv_import(client):
+    client.post("/api/people", json={"name": "Priya Shah"})
+    client.post("/api/workstreams", json={"name": "Methodology"})
+
+    csv_content = (
+        "Task Name,Bucket Name,Progress,Priority,Assigned To,Due Date,Description\n"
+        "Draft pilot plan,Methodology,In progress,Important,Priya Shah;Someone Else,2026-08-15,First cut\n"
+        "Orphan task,,Not started,Low,Nobody Known,,\n"
+        ",,,,,,\n"
+    )
+    preview = client.post(
+        "/api/imports/planner/preview",
+        files={"file": ("plan.csv", csv_content, "text/csv")},
+    ).json()
+    assert len(preview["items"]) == 2
+    first = preview["items"][0]
+    assert first["owner_matched"] and first["workstream_id"] is not None
+    assert first["status"] == "in_progress" and first["priority"] == "high"
+    assert preview["items"][1]["owner_matched"] is False
+
+    result = client.post("/api/imports/planner/commit", json={"items": preview["items"]}).json()
+    assert result["created"] == 2
+    actions = client.get("/api/actions").json()
+    assert any(a["title"] == "Draft pilot plan" and a["due_date"] == "2026-08-15" for a in actions)
+
+
+def test_templates_and_modules(client):
+    template = client.get("/api/imports/templates/actions")
+    assert template.status_code == 200 and template.text.startswith("title,")
+    assert client.get("/api/imports/templates/nope").status_code == 404
+
+    modules = client.get("/api/modules").json()
+    names = {m["name"] for m in modules}
+    assert {"diary-import", "outlook-diary-extractor"} <= names
+    extractor = next(m for m in modules if m["name"] == "outlook-diary-extractor")
+    assert extractor["available"] is False  # we're not on Windows
+
+    # missing required arg rejected
+    assert client.post("/api/modules/diary-import/run", json={"args": {}}).status_code == 422
+    # unavailable platform rejected
+    assert client.post("/api/modules/outlook-diary-extractor/run", json={"args": {"mailbox": "x", "out_file": "y"}}).status_code == 409
