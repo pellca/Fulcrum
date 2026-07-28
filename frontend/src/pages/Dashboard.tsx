@@ -10,6 +10,7 @@ import {
   Flag,
   Landmark,
   Lightbulb,
+  RotateCcw,
 } from 'lucide-react'
 import { api, type ChaseQueueItem, type DashboardSummary, type DashItem } from '../api'
 import { Badge, Button, Card, EmptyState, fmtDate, fmtDateTime, PageHeader, priorityTone, Spinner, StatusBadge } from '../components/ui'
@@ -51,6 +52,44 @@ function ItemRow({ item, kind }: { item: DashItem; kind: 'action' | 'commitment'
       <div className="flex shrink-0 items-center gap-1.5">
         <Badge tone={priorityTone[item.priority]}>{item.priority}</Badge>
         <Badge tone="red">{fmtDate(item.due_date)}</Badge>
+      </div>
+    </div>
+  )
+}
+
+function ReviewRow({ decision }: { decision: DashboardSummary['decisions_for_review'][number] }) {
+  const queryClient = useQueryClient()
+  const patch = useMutation({
+    mutationFn: (body: Record<string, unknown>) => api.patch(`/decisions/${decision.id}`, body),
+    onSuccess: () => {
+      toast.success('Decision updated')
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+  const push = (days: number) =>
+    patch.mutate({ review_on: new Date(Date.now() + days * 86400000).toISOString().slice(0, 10) })
+  return (
+    <div className="flex items-center justify-between gap-2 py-1.5">
+      <div className="min-w-0">
+        <div className="truncate text-[13px] font-medium">{decision.title}</div>
+        <div className="text-xs text-slate-500 dark:text-slate-400">
+          {decision.owner ?? 'Unowned'}
+          {decision.decided_on ? ` · decided ${fmtDate(decision.decided_on)}` : ''}
+          {decision.days_overdue > 0 && (
+            <span className="text-rose-500"> · review {decision.days_overdue}d overdue</span>
+          )}
+        </div>
+      </div>
+      <div className="no-print flex shrink-0 gap-1">
+        <Button size="sm" variant="secondary" onClick={() => patch.mutate({ review_on: null })} title="Reviewed — close it off">
+          Reviewed
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => push(30)} title="Push the review out 30 days">
+          +30d
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => push(90)} title="Push the review out 90 days">
+          +90d
+        </Button>
       </div>
     </div>
   )
@@ -138,6 +177,15 @@ export default function Dashboard() {
 
       <div className="grid gap-4 xl:grid-cols-2 print:grid-cols-2 print:gap-3">
         <div className="space-y-4">
+          {data.decisions_for_review.length > 0 && (
+            <Card title={<span className="flex items-center gap-1.5"><RotateCcw size={14} /> Decisions due for revisit</span>}>
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {data.decisions_for_review.map((decision) => (
+                  <ReviewRow key={decision.id} decision={decision} />
+                ))}
+              </div>
+            </Card>
+          )}
           <Card title={<span className="flex items-center gap-1.5"><BellRing size={14} /> Chase queue</span>}>
             {data.chase_queue.length === 0 ? (
               <EmptyState icon={<CheckCircle2 size={28} />} title="Nobody needs a nudge" hint="Log a chase on any action or commitment and set a re-chase date to build the queue." />

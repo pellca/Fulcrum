@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus, X } from 'lucide-react'
+import { NotebookTabs, Plus, X } from 'lucide-react'
 import { api, type Person, type Workstream } from '../api'
 import {
   Badge,
@@ -111,6 +112,11 @@ function PeopleTable() {
                   {!person.active && <Badge tone="slate">inactive</Badge>}
                 </td>
                 <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                  <Link to={`/people/${person.id}/pack`}>
+                    <Button size="sm" variant="ghost" title="Everything they own — prep for a 1:1">
+                      <NotebookTabs size={13} /> 1:1 pack
+                    </Button>
+                  </Link>
                   <Button size="sm" variant="ghost" onClick={() => setEditing(person)}>
                     Edit
                   </Button>

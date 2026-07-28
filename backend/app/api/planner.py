@@ -129,3 +129,66 @@ def timeline(weeks: int = 8, db: Session = Depends(get_db)):
 @router.get("/planner/risks")
 def planner_risks(db: Session = Depends(get_db)):
     return risk_chains(db)
+
+
+@router.get("/planner/capacity")
+def capacity_heatmap(weeks: int = 8, db: Session = Depends(get_db)):
+    """Open actions+commitments per owner per week — who is carrying how much."""
+    from ..models import Action, Person
+
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+    week_starts = [monday + timedelta(weeks=i) for i in range(weeks)]
+
+    def bucket_index(due: date | None) -> str | int:
+        if due is None:
+            return "no_date"
+        if due < today:
+            return "overdue"
+        offset = (due - monday).days // 7
+        return offset if 0 <= offset < weeks else "later"
+
+    rows: dict[int, dict] = {}
+
+    def add(owner: Person, title: str, kind: str, priority: str, due: date | None):
+        row = rows.setdefault(
+            owner.id,
+            {
+                "person": {"id": owner.id, "name": owner.name, "role": owner.role},
+                "overdue": {"count": 0, "items": []},
+                "cells": [{"count": 0, "items": []} for _ in range(weeks)],
+                "no_date": {"count": 0, "items": []},
+                "later": {"count": 0, "items": []},
+                "total": 0,
+            },
+        )
+        label = f"{title} ({kind}, {priority}" + (f", due {due.isoformat()})" if due else ")")
+        bucket = bucket_index(due)
+        target = row["cells"][bucket] if isinstance(bucket, int) else row[bucket]
+        target["count"] += 1
+        if len(target["items"]) < 8:
+            target["items"].append(label)
+        row["total"] += 1
+
+    open_actions = (
+        db.query(Action)
+        .filter(Action.status.notin_(["done", "cancelled"]), Action.owner_id.isnot(None))
+        .all()
+    )
+    for action in open_actions:
+        add(action.owner, action.title, "action", action.priority, action.due_date)
+    open_commitments = (
+        db.query(Commitment)
+        .filter(Commitment.status.notin_(["delivered", "dropped"]), Commitment.owner_id.isnot(None))
+        .all()
+    )
+    for commitment in open_commitments:
+        add(commitment.owner, commitment.title, "commitment", commitment.priority, commitment.due_date)
+
+    return {
+        "weeks": [
+            {"start": start.isoformat(), "label": f"w/c {start.strftime('%d %b').lstrip('0')}"}
+            for start in week_starts
+        ],
+        "rows": sorted(rows.values(), key=lambda r: -r["total"]),
+    }

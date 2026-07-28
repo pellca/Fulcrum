@@ -48,6 +48,49 @@ def test_full_lifecycle(client):
     assert client.post("/api/people", json={"name": "New Person"}).status_code == 201
 
 
+def test_one_to_one_pack(client):
+    client.post("/api/admin/seed")
+    person = next(p for p in client.get("/api/people").json() if p["name"] == "Sarah Chen")
+    pack = client.get(f"/api/people/{person['id']}/pack").json()
+    assert pack["person"]["name"] == "Sarah Chen"
+    all_titles = [i["title"] for i in pack["overdue"] + pack["due_soon"] + pack["later"]]
+    assert "Agree revised credit risk audit scope with 2LoD" in all_titles
+    assert any(t["title"].startswith("Credit scope change") for t in pack["topics"])
+    assert client.get("/api/people/99999/pack").status_code == 404
+
+
+def test_decision_review_dates(client):
+    client.post("/api/people", json={"name": "Alex Morgan"})
+    created = client.post(
+        "/api/decisions",
+        json={"title": "Revisit hybrid working stance", "review_on": "2020-01-01"},
+    ).json()
+    assert created["review_on"] == "2020-01-01"
+
+    summary = client.get("/api/dashboard/summary").json()
+    due = summary["decisions_for_review"]
+    assert any(d["id"] == created["id"] and d["days_overdue"] > 0 for d in due)
+
+    # clearing the review date removes it from the queue
+    client.patch(f"/api/decisions/{created['id']}", json={"review_on": None})
+    summary = client.get("/api/dashboard/summary").json()
+    assert all(d["id"] != created["id"] for d in summary["decisions_for_review"])
+
+
+def test_capacity_heatmap(client):
+    client.post("/api/admin/seed")
+    data = client.get("/api/planner/capacity?weeks=4").json()
+    assert len(data["weeks"]) == 4
+    rows = {r["person"]["name"]: r for r in data["rows"]}
+    assert "Sarah Chen" in rows and "Tom Okafor" in rows
+    tom = rows["Tom Okafor"]
+    assert tom["overdue"]["count"] >= 2  # seeded overdue MI items
+    assert all(row["total"] >= 1 for row in data["rows"])
+    # rows sorted by load, heaviest first
+    totals = [r["total"] for r in data["rows"]]
+    assert totals == sorted(totals, reverse=True)
+
+
 def test_planner_csv_import(client):
     client.post("/api/people", json={"name": "Priya Shah"})
     client.post("/api/workstreams", json={"name": "Methodology"})

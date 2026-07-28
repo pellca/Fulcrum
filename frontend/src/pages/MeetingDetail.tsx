@@ -324,6 +324,7 @@ function CaptureCard({ meetingId }: { meetingId: number }) {
   const { data: people = [] } = useQuery({ queryKey: ['people'], queryFn: () => api.get<Person[]>('/people') })
   const [title, setTitle] = useState('')
   const [ownerId, setOwnerId] = useState('')
+  const [reviewOn, setReviewOn] = useState('')
   const [spawnAction, setSpawnAction] = useState(true)
   const [actionTitle, setActionTitle] = useState('')
   const [actionDue, setActionDue] = useState('')
@@ -335,6 +336,7 @@ function CaptureCard({ meetingId }: { meetingId: number }) {
         title,
         decided_on: new Date().toISOString().slice(0, 10),
         owner_id: ownerId ? Number(ownerId) : null,
+        review_on: reviewOn || null,
       })
       if (spawnAction && actionTitle) {
         const action = await api.post<{ id: number }>('/actions', {
@@ -356,6 +358,7 @@ function CaptureCard({ meetingId }: { meetingId: number }) {
     onSuccess: () => {
       toast.success('Decision captured')
       setTitle('')
+      setReviewOn('')
       setActionTitle('')
       setActionDue('')
       queryClient.invalidateQueries({ queryKey: ['decisions', meetingId] })
@@ -383,7 +386,7 @@ function CaptureCard({ meetingId }: { meetingId: number }) {
         <Field label="Decision">
           <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What was decided?" />
         </Field>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <Field label="Owner">
             <Select value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
               <option value="">None</option>
@@ -393,6 +396,9 @@ function CaptureCard({ meetingId }: { meetingId: number }) {
                 </option>
               ))}
             </Select>
+          </Field>
+          <Field label="Revisit on (optional)">
+            <Input type="date" value={reviewOn} onChange={(e) => setReviewOn(e.target.value)} title="The decision resurfaces on the dashboard on this date" />
           </Field>
           <label className="flex items-end gap-1.5 pb-2 text-[13px] text-slate-600 dark:text-slate-300">
             <input type="checkbox" checked={spawnAction} onChange={(e) => setSpawnAction(e.target.checked)} className="rounded accent-indigo-600" />

@@ -37,17 +37,21 @@ export default function Register() {
   const [creating, setCreating] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
 
-  // deep link: /register?open=action-12 or ?open=commitment-3 opens the drawer directly
+  // deep links: ?open=action-12 opens a drawer; ?owner=3 pre-filters by owner
   useEffect(() => {
     const open = searchParams.get('open')
-    if (!open) return
-    const [kind, rawId] = open.split('-')
-    const id = Number(rawId)
-    if ((kind === 'action' || kind === 'commitment') && id) {
-      const tabKind: Tab = kind === 'action' ? 'actions' : 'commitments'
-      setTab(tabKind)
-      setSelected({ kind: tabKind, id })
+    const owner = searchParams.get('owner')
+    if (!open && !owner) return
+    if (open) {
+      const [kind, rawId] = open.split('-')
+      const id = Number(rawId)
+      if ((kind === 'action' || kind === 'commitment') && id) {
+        const tabKind: Tab = kind === 'action' ? 'actions' : 'commitments'
+        setTab(tabKind)
+        setSelected({ kind: tabKind, id })
+      }
     }
+    if (owner) setFilters((f) => ({ ...f, owner_id: owner }))
     setSearchParams({}, { replace: true })
   }, [searchParams, setSearchParams])
 

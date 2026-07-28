@@ -13,6 +13,7 @@ import MeetingDetail from './pages/MeetingDetail'
 import Planner from './pages/Planner'
 import Diary from './pages/Diary'
 import People from './pages/People'
+import OneToOnePack from './pages/OneToOnePack'
 import Modules from './pages/Modules'
 import SettingsPage from './pages/Settings'
 
@@ -32,6 +33,7 @@ const router = createBrowserRouter([
       { path: '/planner', element: <Planner /> },
       { path: '/diary', element: <Diary /> },
       { path: '/people', element: <People /> },
+      { path: '/people/:id/pack', element: <OneToOnePack /> },
       { path: '/modules', element: <Modules /> },
       { path: '/settings', element: <SettingsPage /> },
     ],

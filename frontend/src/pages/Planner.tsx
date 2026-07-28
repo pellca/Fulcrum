@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { Flag, Plus } from 'lucide-react'
 import { api, type KeyDate, type TimelineData, type Workstream } from '../api'
 import { RiskChainsCard } from '../components/RiskChains'
+import { CapacityHeatmap } from '../components/CapacityHeatmap'
 import {
   Badge,
   Button,
@@ -142,6 +143,7 @@ export default function Planner() {
         <LookAhead timeline={timeline} />
       </div>
 
+      <CapacityHeatmap weeks={weeks} />
       <KeyDatesCard />
       <AddKeyDateModal open={addingKeyDate} onClose={() => setAddingKeyDate(false)} workstreams={workstreams} />
     </div>

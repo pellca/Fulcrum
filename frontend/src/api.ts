@@ -242,6 +242,15 @@ export interface ModuleRun {
 
 export interface DashboardSummary {
   today: string
+  decisions_for_review: {
+    id: number
+    title: string
+    status: string
+    owner: string | null
+    decided_on: string | null
+    review_on: string | null
+    days_overdue: number
+  }[]
   overdue_actions: DashItem[]
   due_soon_actions: DashItem[]
   overdue_commitments: DashItem[]

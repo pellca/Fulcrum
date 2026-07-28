@@ -1,9 +1,12 @@
+from datetime import date, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Person, PersonAlias
+from ..models import Action, Commitment, Decision, Person, PersonAlias, Topic
 from ..schemas import PersonIn, PersonOut, PersonPatch
+from ..services.chase import latest_chase_map
 
 router = APIRouter(prefix="/people", tags=["people"])
 
@@ -41,6 +44,111 @@ def delete_person(person_id: int, db: Session = Depends(get_db)):
     if person:
         db.delete(person)
         db.commit()
+
+
+@router.get("/{person_id}/pack")
+def one_to_one_pack(person_id: int, db: Session = Depends(get_db)):
+    """Everything you need in hand before a 1:1 with this person."""
+    person = db.get(Person, person_id)
+    if not person:
+        raise HTTPException(404)
+    today = date.today()
+    soon = today + timedelta(days=14)
+    latest = latest_chase_map(db)
+
+    def item_row(item, kind: str) -> dict:
+        chase = latest.get((kind, item.id))
+        return {
+            "id": item.id,
+            "type": kind,
+            "title": item.title,
+            "due_date": item.due_date.isoformat() if item.due_date else None,
+            "status": item.status,
+            "priority": item.priority,
+            "workstream": item.workstream.name if item.workstream else None,
+            "origin": getattr(item, "origin", None),
+            "last_chased_on": chase.chased_on.isoformat() if chase else None,
+            "next_chase_on": chase.next_chase_on.isoformat() if chase and chase.next_chase_on else None,
+        }
+
+    open_actions = (
+        db.query(Action)
+        .filter(Action.owner_id == person_id, Action.status.notin_(["done", "cancelled"]))
+        .order_by(Action.due_date.is_(None), Action.due_date)
+        .all()
+    )
+    open_commitments = (
+        db.query(Commitment)
+        .filter(Commitment.owner_id == person_id, Commitment.status.notin_(["delivered", "dropped"]))
+        .order_by(Commitment.due_date.is_(None), Commitment.due_date)
+        .all()
+    )
+    items = [item_row(a, "action") for a in open_actions] + [
+        item_row(c, "commitment") for c in open_commitments
+    ]
+
+    overdue = [i for i in items if i["due_date"] and i["due_date"] < today.isoformat()]
+    due_soon = [
+        i for i in items if i["due_date"] and today.isoformat() <= i["due_date"] <= soon.isoformat()
+    ]
+    later = [i for i in items if i not in overdue and i not in due_soon]
+    waiting_on = sorted(
+        (i for i in items if i["next_chase_on"] and i["next_chase_on"] <= today.isoformat()),
+        key=lambda i: i["next_chase_on"],
+    )
+
+    decisions = (
+        db.query(Decision)
+        .filter(
+            Decision.owner_id == person_id,
+            (Decision.status.in_(["pending", "revisit"]))
+            | ((Decision.review_on.isnot(None)) & (Decision.review_on <= soon)),
+        )
+        .order_by(Decision.review_on.is_(None), Decision.review_on)
+        .all()
+    )
+    topics = (
+        db.query(Topic)
+        .filter(Topic.sponsor_id == person_id, Topic.status.in_(["proposed", "parked"]))
+        .order_by(Topic.target_by.is_(None), Topic.target_by)
+        .all()
+    )
+
+    return {
+        "person": {
+            "id": person.id,
+            "name": person.name,
+            "role": person.role,
+            "team": person.team,
+        },
+        "generated": today.isoformat(),
+        "overdue": sorted(overdue, key=lambda i: i["due_date"]),
+        "due_soon": sorted(due_soon, key=lambda i: i["due_date"]),
+        "later": later,
+        "waiting_on": waiting_on,
+        "decisions": [
+            {
+                "id": d.id,
+                "title": d.title,
+                "status": d.status,
+                "decided_on": d.decided_on.isoformat() if d.decided_on else None,
+                "review_on": d.review_on.isoformat() if d.review_on else None,
+            }
+            for d in decisions
+        ],
+        "topics": [
+            {
+                "id": t.id,
+                "title": t.title,
+                "intent": t.intent,
+                "readiness": t.readiness,
+                "status": t.status,
+                "target_by": t.target_by.isoformat() if t.target_by else None,
+                "duration_minutes": t.duration_minutes,
+            }
+            for t in topics
+        ],
+    }
 
 
 @router.post("/{person_id}/aliases", response_model=PersonOut)

@@ -184,7 +184,7 @@ def load_demo(db: Session) -> dict:
     decision = Decision(
         meeting_id=meetings[0].id, title="Adopt fortnightly S166 checkpoint",
         detail="Standing 15-min checkpoint until submission.", decided_on=today - timedelta(days=7),
-        owner_id=people["principal"].id, is_demo=True,
+        owner_id=people["principal"].id, review_on=today, is_demo=True,
     )
     db.add(decision)
     db.commit()

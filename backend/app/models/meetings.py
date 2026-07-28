@@ -105,6 +105,8 @@ class Decision(Base, TimestampMixin, DemoMixin):
     # decided | pending | revisit
     status: Mapped[str] = mapped_column(String(20), default="decided")
     owner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("person.id", ondelete="SET NULL"))
+    # when set, the decision resurfaces on the dashboard on/after this date
+    review_on: Mapped[Optional[date]] = mapped_column(Date)
 
     meeting: Mapped[Optional[Meeting]] = relationship(back_populates="decisions")
     owner: Mapped[Optional[Person]] = relationship()

@@ -145,7 +145,7 @@ Everything below attaches through the existing seams (REST API, module registry,
 |---|---|---|---|---|
 | **Critical-path scheduling** | Real earliest/latest dates and slack across the dependency graph; move one date and watch the cascade recompute. Turns the planner from a picture into an engine. | ★★★ | L | free |
 | **Scenario mode** | "What if S166 slips two weeks?" — preview the downstream impact without committing it. | ★★ | M | free |
-| **Owner capacity heatmap** | Who is carrying how much, by week — spot the overloaded director before they miss. | ★★ | M | free |
+| **Owner capacity heatmap** ✅ *shipped* | Who is carrying how much, by week — spot the overloaded director before they miss. | ★★ | M | free |
 | **Recurring commitments** | Weekly status notes etc. auto-regenerate on their cadence instead of being re-keyed. | ★★ | S | free |
 | **Milestones & swimlane export** | Workstream milestones plus the polished printable swimlane (the one genuinely good bit of DynoCal). | ★ | M | free |
 
@@ -162,9 +162,9 @@ Everything below attaches through the existing seams (REST API, module registry,
 
 | Feature | What it does | Value | Effort | Cost |
 |---|---|---|---|---|
-| **1:1 packs** | One click per person: everything they own, overdue, promised, and decisions awaiting them — walk into any 1:1 armed. | ★★★ | S | free |
+| **1:1 packs** ✅ *shipped* | One click per person: everything they own, overdue, promised, and decisions awaiting them — walk into any 1:1 armed. | ★★★ | S | free |
 | **Weekly principal report builder** | Curated weekly pack (delivered/slipped/decisions needed/horizon) as PDF; the daily-brief pipeline generalised. | ★★ | M | free |
-| **Decision review dates** | Decisions carry a revisit date and resurface on the dashboard when due — "we said we'd look at this again in Q4" never gets lost. | ★★ | S | free |
+| **Decision review dates** ✅ *shipped* | Decisions carry a revisit date and resurface on the dashboard when due — "we said we'd look at this again in Q4" never gets lost. | ★★ | S | free |
 | **Data quality panel** | Unowned items, missing due dates, stale statuses, unlinked meetings — keeps the register trustworthy, which everything else depends on. | ★★ | S | free |
 
 ### 6 · Platform & quality of life

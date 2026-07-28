@@ -373,6 +373,7 @@ class DecisionIn(BaseModel):
     decided_on: Optional[date] = None
     status: Literal["decided", "pending", "revisit"] = "decided"
     owner_id: Optional[int] = None
+    review_on: Optional[date] = None
 
 
 class DecisionPatch(BaseModel):
@@ -381,6 +382,7 @@ class DecisionPatch(BaseModel):
     decided_on: Optional[date] = None
     status: Optional[Literal["decided", "pending", "revisit"]] = None
     owner_id: Optional[int] = None
+    review_on: Optional[date] = None
 
 
 class DecisionOut(ORMModel):
@@ -391,6 +393,7 @@ class DecisionOut(ORMModel):
     decided_on: Optional[date]
     status: str
     owner: Optional[PersonMini]
+    review_on: Optional[date] = None
     created_at: datetime
 
 

@@ -33,3 +33,24 @@ def init_db() -> None:
     from . import models  # noqa: F401  (register mappings)
 
     Base.metadata.create_all(engine)
+    _migrate()
+
+
+# columns added after a table first shipped; create_all won't add them to existing DBs
+_COLUMN_MIGRATIONS = [
+    ("decision", "review_on", "DATE"),
+]
+
+
+def _migrate() -> None:
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    for table, column, ddl_type in _COLUMN_MIGRATIONS:
+        if table not in tables:
+            continue
+        existing = {col["name"] for col in inspector.get_columns(table)}
+        if column not in existing:
+            with engine.begin() as connection:
+                connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))

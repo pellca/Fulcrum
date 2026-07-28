@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Action, Commitment, KeyDate, Meeting, Topic
+from ..models import Action, Commitment, Decision, KeyDate, Meeting, Topic
 from ..services.chase import chase_queue
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -119,8 +119,24 @@ def summary(db: Session = Depends(get_db)):
             }
         )
 
+    decisions_for_review = [
+        {
+            "id": d.id,
+            "title": d.title,
+            "status": d.status,
+            "owner": d.owner.name if d.owner else None,
+            "decided_on": d.decided_on.isoformat() if d.decided_on else None,
+            "review_on": d.review_on.isoformat() if d.review_on else None,
+            "days_overdue": (today - d.review_on).days if d.review_on else 0,
+        }
+        for d in db.query(Decision)
+        .filter(Decision.review_on.isnot(None), Decision.review_on <= today)
+        .order_by(Decision.review_on)
+    ]
+
     return {
         "today": today.isoformat(),
+        "decisions_for_review": decisions_for_review,
         "overdue_actions": overdue_actions,
         "due_soon_actions": due_soon_actions,
         "overdue_commitments": overdue_commitments,
