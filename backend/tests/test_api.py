@@ -91,6 +91,58 @@ def test_capacity_heatmap(client):
     assert totals == sorted(totals, reverse=True)
 
 
+def test_convert_action_and_commitment(client):
+    client.post("/api/people", json={"name": "Sarah Chen"})
+    person_id = client.get("/api/people").json()[0]["id"]
+    parent = client.post("/api/commitments", json={"title": "Parent commitment"}).json()
+    action = client.post(
+        "/api/actions",
+        json={
+            "title": "Deliver scope pack",
+            "owner_id": person_id,
+            "commitment_id": parent["id"],
+            "due_date": "2026-08-10",
+            "status": "blocked",
+            "priority": "high",
+            "notes": "Waiting on 2LoD",
+        },
+    ).json()
+    client.post(
+        "/api/chases",
+        json={"action_id": action["id"], "chased_on": "2026-07-27", "note": "nudged", "next_chase_on": "2026-08-01"},
+    )
+    client.post(
+        "/api/links",
+        json={"from_type": "action", "from_id": action["id"], "to_type": "commitment", "to_id": parent["id"], "kind": "precedes"},
+    )
+
+    # action -> commitment: status maps, chases + links move, notes preserved
+    converted = client.post(f"/api/actions/{action['id']}/convert", json={"origin": "aet"}).json()
+    assert converted["status"] == "at_risk"
+    assert converted["origin"] == "aet"
+    assert "[Notes] Waiting on 2LoD" in converted["description"]
+    assert converted["next_chase_on"] == "2026-08-01"
+    assert client.get(f"/api/actions/{action['id']}").status_code == 404
+    chases = client.get(f"/api/chases?commitment_id={converted['id']}").json()
+    assert len(chases) == 1
+    links = client.get(f"/api/links/for/commitment/{converted['id']}").json()
+    assert any(l["kind"] == "precedes" for l in links)
+
+    # commitment -> action: status maps back, chases follow again
+    back = client.post(f"/api/commitments/{converted['id']}/convert").json()
+    assert back["status"] == "blocked"
+    assert "Origin before conversion: aet" in back["notes"]
+    assert client.get(f"/api/commitments/{converted['id']}").status_code == 404
+    assert len(client.get(f"/api/chases?action_id={back['id']}").json()) == 1
+
+    # converting a commitment that has delivery actions keeps a relates link to them
+    child = client.post("/api/actions", json={"title": "Child task", "commitment_id": parent["id"]}).json()
+    parent_as_action = client.post(f"/api/commitments/{parent['id']}/convert").json()
+    child_links = client.get(f"/api/links/for/action/{child['id']}").json()
+    assert any(l["from_id"] == parent_as_action["id"] and l["kind"] == "relates" for l in child_links)
+    assert client.get(f"/api/actions/{child['id']}").json()["commitment"] is None
+
+
 def test_global_search(client):
     client.post("/api/admin/seed")
 

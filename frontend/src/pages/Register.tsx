@@ -180,10 +180,30 @@ export default function Register() {
       )}
 
       {selected?.kind === 'actions' && (
-        <ActionDrawer key={selected.id} id={selected.id} onClose={() => setSelected(null)} people={people} workstreams={workstreams} />
+        <ActionDrawer
+          key={selected.id}
+          id={selected.id}
+          onClose={() => setSelected(null)}
+          onConverted={(id) => {
+            setTab('commitments')
+            setSelected({ kind: 'commitments', id })
+          }}
+          people={people}
+          workstreams={workstreams}
+        />
       )}
       {selected?.kind === 'commitments' && (
-        <CommitmentDrawer key={selected.id} id={selected.id} onClose={() => setSelected(null)} people={people} workstreams={workstreams} />
+        <CommitmentDrawer
+          key={selected.id}
+          id={selected.id}
+          onClose={() => setSelected(null)}
+          onConverted={(id) => {
+            setTab('actions')
+            setSelected({ kind: 'actions', id })
+          }}
+          people={people}
+          workstreams={workstreams}
+        />
       )}
       <CreateModal open={creating} onClose={() => setCreating(false)} kind={tab} people={people} workstreams={workstreams} />
     </div>
@@ -263,8 +283,9 @@ function ItemTable({
   )
 }
 
-function ActionDrawer({ id, onClose, people, workstreams }: { id: number; onClose: () => void; people: Person[]; workstreams: Workstream[] }) {
+function ActionDrawer({ id, onClose, onConverted, people, workstreams }: { id: number; onClose: () => void; onConverted: (id: number) => void; people: Person[]; workstreams: Workstream[] }) {
   const queryClient = useQueryClient()
+  const [convertOrigin, setConvertOrigin] = useState('principal')
   const { data: item } = useQuery({ queryKey: ['action', id], queryFn: () => api.get<Action>(`/actions/${id}`) })
   const { data: commitments = [] } = useQuery({ queryKey: ['commitments', 'all-open'], queryFn: () => api.get<Commitment[]>('/commitments?open_only=true') })
 
@@ -283,6 +304,15 @@ function ActionDrawer({ id, onClose, people, workstreams }: { id: number; onClos
       onClose()
       queryClient.invalidateQueries({ queryKey: ['actions'] })
     },
+  })
+  const convert = useMutation({
+    mutationFn: () => api.post<Commitment>(`/actions/${id}/convert`, { origin: convertOrigin }),
+    onSuccess: (commitment) => {
+      toast.success('Converted to commitment', { description: 'Chases, links and history moved with it.' })
+      queryClient.invalidateQueries()
+      onConverted(commitment.id)
+    },
+    onError: (e: Error) => toast.error(e.message),
   })
 
   if (!item) return null
@@ -358,6 +388,25 @@ function ActionDrawer({ id, onClose, people, workstreams }: { id: number; onClos
       </Field>
       <ChasePanel kind="action" itemId={id} />
       <LinkPanel entityType="action" entityId={id} />
+      <Section title="Convert">
+        <div className="flex items-end gap-2">
+          <div className="w-44">
+            <Field label="Owed to (origin)">
+              <Select value={convertOrigin} onChange={(e) => setConvertOrigin(e.target.value)}>
+                {ORIGINS.map((o) => (
+                  <option key={o}>{o}</option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+          <Button variant="secondary" size="sm" onClick={() => convert.mutate()} disabled={convert.isPending}>
+            Make this a commitment
+          </Button>
+        </div>
+        <p className="mt-1.5 text-xs text-slate-400">
+          Chases, links and history move across; status maps (blocked → at risk, done → delivered).
+        </p>
+      </Section>
       <Section title="Danger zone">
         <Button variant="danger" size="sm" onClick={() => remove.mutate()}>
           Delete action
@@ -367,7 +416,7 @@ function ActionDrawer({ id, onClose, people, workstreams }: { id: number; onClos
   )
 }
 
-function CommitmentDrawer({ id, onClose, people, workstreams }: { id: number; onClose: () => void; people: Person[]; workstreams: Workstream[] }) {
+function CommitmentDrawer({ id, onClose, onConverted, people, workstreams }: { id: number; onClose: () => void; onConverted: (id: number) => void; people: Person[]; workstreams: Workstream[] }) {
   const queryClient = useQueryClient()
   const { data: item } = useQuery({ queryKey: ['commitment', id], queryFn: () => api.get<Commitment>(`/commitments/${id}`) })
   const { data: linkedActions = [] } = useQuery({
@@ -390,6 +439,15 @@ function CommitmentDrawer({ id, onClose, people, workstreams }: { id: number; on
       onClose()
       queryClient.invalidateQueries({ queryKey: ['commitments'] })
     },
+  })
+  const convert = useMutation({
+    mutationFn: () => api.post<Action>(`/commitments/${id}/convert`),
+    onSuccess: (action) => {
+      toast.success('Converted to action', { description: 'Chases, links and history moved with it.' })
+      queryClient.invalidateQueries()
+      onConverted(action.id)
+    },
+    onError: (e: Error) => toast.error(e.message),
   })
 
   if (!item) return null
@@ -479,6 +537,15 @@ function CommitmentDrawer({ id, onClose, people, workstreams }: { id: number; on
       </Section>
       <ChasePanel kind="commitment" itemId={id} />
       <LinkPanel entityType="commitment" entityId={id} />
+      <Section title="Convert">
+        <Button variant="secondary" size="sm" onClick={() => convert.mutate()} disabled={convert.isPending}>
+          Make this an action
+        </Button>
+        <p className="mt-1.5 text-xs text-slate-400">
+          Chases, links and history move across; status maps back (at risk → blocked). Any delivery
+          actions and linked topics stay connected via <em>relates</em> links.
+        </p>
+      </Section>
       <Section title="Danger zone">
         <Button variant="danger" size="sm" onClick={() => remove.mutate()}>
           Delete commitment
