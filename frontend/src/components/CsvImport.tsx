@@ -30,6 +30,8 @@ interface Preview {
   columns: Record<string, string>
   items: PreviewItem[]
   skipped: number
+  default_type: string
+  type_column_present: boolean
 }
 
 export function CopyCopilotPromptButton() {
@@ -52,7 +54,7 @@ export function CopyCopilotPromptButton() {
   )
 }
 
-export function ImportCsvButton() {
+export function ImportCsvButton({ defaultType }: { defaultType?: 'action' | 'commitment' | 'topic' }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [defaultMeeting, setDefaultMeeting] = useState('')
@@ -65,7 +67,11 @@ export function ImportCsvButton() {
   })
 
   const upload = useMutation({
-    mutationFn: (file: File) => api.upload<Preview>('/imports/planner/preview', file),
+    mutationFn: (file: File) =>
+      api.upload<Preview>(
+        `/imports/planner/preview${defaultType ? `?default_type=${defaultType}` : ''}`,
+        file,
+      ),
     onSuccess: (result) => {
       if (!result.items.length) {
         toast.error('No importable rows found in that file')
@@ -164,6 +170,13 @@ export function ImportCsvButton() {
           <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
             {preview.skipped > 0 && <>Skipped {preview.skipped} row(s) without a title. </>}
             Owners in amber didn't match a known person — the name is kept but unassigned.
+            {!preview.type_column_present && (
+              <>
+                {' '}
+                No <code>type</code> column in this file, so rows are being imported as{' '}
+                <strong>{preview.default_type}s</strong> — add a <code>type</code> column to mix types.
+              </>
+            )}
           </p>
           {rowsWithoutMeeting > 0 && (
             <Field label={`Attach the ${rowsWithoutMeeting} row(s) without a source meeting to:`}>

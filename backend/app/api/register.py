@@ -19,6 +19,7 @@ from ..schemas import (
     CommitmentPatch,
     QuickAddIn,
 )
+from ..services.bulk import delete_entities
 from ..services.chase import latest_chase_map, next_chase_for
 from ..services.quickadd import parse_quickadd
 
@@ -95,10 +96,7 @@ def update_commitment(item_id: int, body: CommitmentPatch, db: Session = Depends
 
 @router.delete("/commitments/{item_id}", status_code=204)
 def delete_commitment(item_id: int, db: Session = Depends(get_db)):
-    commitment = db.get(Commitment, item_id)
-    if commitment:
-        db.delete(commitment)
-        db.commit()
+    delete_entities(db, "commitment", [item_id])
 
 
 @router.get("/actions", response_model=list[ActionOut])
@@ -154,10 +152,7 @@ def update_action(item_id: int, body: ActionPatch, db: Session = Depends(get_db)
 
 @router.delete("/actions/{item_id}", status_code=204)
 def delete_action(item_id: int, db: Session = Depends(get_db)):
-    action = db.get(Action, item_id)
-    if action:
-        db.delete(action)
-        db.commit()
+    delete_entities(db, "action", [item_id])
 
 
 @router.get("/chases", response_model=list[ChaseOut])

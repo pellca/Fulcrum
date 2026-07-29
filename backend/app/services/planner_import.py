@@ -125,8 +125,29 @@ def _meeting_label(meeting: Meeting) -> str:
     return f"{meeting.forum.name} — {meeting.scheduled_at:%d %b %Y}"
 
 
-def preview_import(db: Session, rows: list[list[str]]) -> dict:
-    """Parse rows into proposed actions/commitments without writing anything."""
+# columns that only make sense for one item type — used to infer a missing `type` column
+TOPIC_ONLY_COLUMNS = {"intent", "duration", "readiness", "recurring"}
+COMMITMENT_ONLY_COLUMNS = {"origin"}
+
+
+def _infer_type(mapping: dict[str, int], default_type: str | None) -> str:
+    """What a row without an explicit `type` value should become."""
+    if default_type in ("action", "commitment", "topic"):
+        return default_type
+    present = set(mapping)
+    if present & TOPIC_ONLY_COLUMNS and not (present & COMMITMENT_ONLY_COLUMNS):
+        return "topic"
+    if present & COMMITMENT_ONLY_COLUMNS:
+        return "commitment"
+    return "action"
+
+
+def preview_import(db: Session, rows: list[list[str]], default_type: str | None = None) -> dict:
+    """Parse rows into proposed actions/commitments/topics without writing anything.
+
+    `default_type` is the importing page's context (e.g. the Topics page sends "topic");
+    rows carrying an explicit `type` value always win over it.
+    """
     if not rows:
         return {"columns": {}, "items": [], "skipped": 0}
     mapping = _map_headers(rows[0])
@@ -136,6 +157,7 @@ def preview_import(db: Session, rows: list[list[str]]) -> dict:
             + ", ".join(HEADER_ALIASES["title"])
             + ")"
         )
+    fallback_type = _infer_type(mapping, default_type)
     items, skipped = [], 0
     for row in rows[1:]:
         def cell(field: str) -> str:
@@ -146,9 +168,9 @@ def preview_import(db: Session, rows: list[list[str]]) -> dict:
         if not title:
             skipped += 1
             continue
-        item_type = cell("type").lower()
+        item_type = cell("type").lower().rstrip("s")  # tolerate "actions"/"topics"
         if item_type not in ("action", "commitment", "topic"):
-            item_type = "action"
+            item_type = fallback_type
         owner_name = cell("owner").split(";")[0].strip()
         owner = find_person(db, owner_name) if owner_name else None
         ws_name = cell("workstream")
@@ -179,7 +201,13 @@ def preview_import(db: Session, rows: list[list[str]]) -> dict:
                 "recurring": cell("recurring").lower() in TRUTHY,
             }
         )
-    return {"columns": {k: rows[0][v] for k, v in mapping.items()}, "items": items, "skipped": skipped}
+    return {
+        "columns": {k: rows[0][v] for k, v in mapping.items()},
+        "items": items,
+        "skipped": skipped,
+        "default_type": fallback_type,
+        "type_column_present": "type" in mapping,
+    }
 
 
 def commit_import(db: Session, items: list[dict], default_meeting_id: int | None = None) -> dict:

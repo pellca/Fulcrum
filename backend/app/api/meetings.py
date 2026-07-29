@@ -24,6 +24,7 @@ from ..schemas import (
     TopicPatch,
 )
 from ..services.agenda_scoring import rank_candidates
+from ..services.bulk import delete_entities
 
 router = APIRouter(tags=["meetings"])
 
@@ -56,10 +57,7 @@ def update_forum(forum_id: int, body: ForumPatch, db: Session = Depends(get_db))
 
 @router.delete("/forums/{forum_id}", status_code=204)
 def delete_forum(forum_id: int, db: Session = Depends(get_db)):
-    forum = db.get(Forum, forum_id)
-    if forum:
-        db.delete(forum)
-        db.commit()
+    delete_entities(db, "forum", [forum_id])
 
 
 # ---------- meetings ----------
@@ -111,10 +109,7 @@ def update_meeting(meeting_id: int, body: MeetingPatch, db: Session = Depends(ge
 
 @router.delete("/meetings/{meeting_id}", status_code=204)
 def delete_meeting(meeting_id: int, db: Session = Depends(get_db)):
-    meeting = db.get(Meeting, meeting_id)
-    if meeting:
-        db.delete(meeting)
-        db.commit()
+    delete_entities(db, "meeting", [meeting_id])
 
 
 # ---------- agenda ----------
@@ -230,10 +225,7 @@ def update_topic(topic_id: int, body: TopicPatch, db: Session = Depends(get_db))
 
 @router.delete("/topics/{topic_id}", status_code=204)
 def delete_topic(topic_id: int, db: Session = Depends(get_db)):
-    topic = db.get(Topic, topic_id)
-    if topic:
-        db.delete(topic)
-        db.commit()
+    delete_entities(db, "topic", [topic_id])
 
 
 # ---------- decisions ----------
@@ -267,7 +259,4 @@ def update_decision(decision_id: int, body: DecisionPatch, db: Session = Depends
 
 @router.delete("/decisions/{decision_id}", status_code=204)
 def delete_decision(decision_id: int, db: Session = Depends(get_db)):
-    decision = db.get(Decision, decision_id)
-    if decision:
-        db.delete(decision)
-        db.commit()
+    delete_entities(db, "decision", [decision_id])

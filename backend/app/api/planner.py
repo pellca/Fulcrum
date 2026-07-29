@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import Commitment, KeyDate, Meeting, Workstream
 from ..schemas import KeyDateIn, KeyDateOut, KeyDatePatch
+from ..services.bulk import delete_entities
 from ..services.timeline import risk_chains
 
 router = APIRouter(tags=["planner"])
@@ -47,10 +48,7 @@ def update_key_date(item_id: int, body: KeyDatePatch, db: Session = Depends(get_
 
 @router.delete("/key-dates/{item_id}", status_code=204)
 def delete_key_date(item_id: int, db: Session = Depends(get_db)):
-    key_date = db.get(KeyDate, item_id)
-    if key_date:
-        db.delete(key_date)
-        db.commit()
+    delete_entities(db, "key_date", [item_id])
 
 
 @router.get("/planner/timeline")

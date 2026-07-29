@@ -131,6 +131,84 @@ def test_topic_csv_import_and_recurring_agenda(client):
     assert client.post(f"/api/meetings/{m2}/agenda", json={"topic_id": standing["id"]}).status_code == 200
 
 
+def test_topic_import_without_type_column(client):
+    """A topics CSV with no `type` column must not import as actions."""
+    csv_content = (
+        "title,description,intent,duration_minutes,readiness,recurring\n"
+        "Quarterly risk deep dive,,consult,30,ready,\n"
+    )
+    # explicit page context wins
+    preview = client.post(
+        "/api/imports/planner/preview?default_type=topic",
+        files={"file": ("topics.csv", csv_content, "text/csv")},
+    ).json()
+    assert preview["items"][0]["type"] == "topic"
+    assert preview["type_column_present"] is False
+
+    # and even without it, topic-only columns are inferred
+    inferred = client.post(
+        "/api/imports/planner/preview", files={"file": ("topics.csv", csv_content, "text/csv")}
+    ).json()
+    assert inferred["default_type"] == "topic"
+    assert inferred["items"][0]["type"] == "topic"
+
+    created = client.post("/api/imports/planner/commit", json={"items": inferred["items"]}).json()
+    assert created["created"] == {"actions": 0, "commitments": 0, "topics": 1, "meeting_links": 0}
+    assert client.get("/api/actions").json() == []
+
+    # a plain action CSV still imports as actions
+    action_csv = "title,owner,due,status,priority\nBook the room,,2026-08-01,Not started,low\n"
+    plain = client.post(
+        "/api/imports/planner/preview", files={"file": ("a.csv", action_csv, "text/csv")}
+    ).json()
+    assert plain["items"][0]["type"] == "action"
+    # an explicit type value always beats the page default
+    mixed = "type,title,intent\ncommitment,Promised thing,\n"
+    override = client.post(
+        "/api/imports/planner/preview?default_type=topic",
+        files={"file": ("m.csv", mixed, "text/csv")},
+    ).json()
+    assert override["items"][0]["type"] == "commitment"
+
+
+def test_bulk_delete_and_reference_checks(client):
+    client.post("/api/admin/seed")
+    actions = client.get("/api/actions").json()
+    ids = [a["id"] for a in actions[:3]]
+
+    check = client.post("/api/bulk/check", json={"type": "action", "ids": ids}).json()
+    assert check["found"] == 3 and check["label"] == "actions"
+    assert any("chase" in w["label"] for w in check["warnings"])
+
+    result = client.post("/api/bulk/delete", json={"type": "action", "ids": ids}).json()
+    assert result["deleted"] == 3
+    remaining = {a["id"] for a in client.get("/api/actions").json()}
+    assert not remaining & set(ids)
+    # links pointing at deleted actions are pruned, not left dangling
+    for link in client.get("/api/links/for/commitment/1").json():
+        assert not (link["from_type"] == "action" and link["from_id"] in ids)
+
+    assert client.post("/api/bulk/delete", json={"type": "nonsense", "ids": [1]}).status_code == 422
+
+
+def test_person_delete_warns_about_orphans(client):
+    client.post("/api/admin/seed")
+    person = next(p for p in client.get("/api/people").json() if p["name"] == "Sarah Chen")
+
+    refs = client.get(f"/api/people/{person['id']}/references").json()
+    labels = {w["label"]: w for w in refs["warnings"]}
+    assert labels["open actions owned"]["count"] >= 1
+    assert labels["open commitments owned"]["count"] >= 1
+    assert labels["topics sponsored"]["count"] >= 1
+    assert labels["open actions owned"]["examples"]
+
+    client.delete(f"/api/people/{person['id']}")
+    assert client.get(f"/api/people/{person['id']}/references").status_code == 404
+    # their items survive, now unowned
+    orphaned = [a for a in client.get("/api/actions").json() if a["owner"] is None]
+    assert orphaned
+
+
 def test_people_csv_import(client):
     client.post("/api/people", json={"name": "Sarah Chen"})
     csv_content = (

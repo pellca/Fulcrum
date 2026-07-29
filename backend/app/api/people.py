@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import Action, Commitment, Decision, Person, PersonAlias, Topic
 from ..schemas import PersonIn, PersonOut, PersonPatch
+from ..services.bulk import check_references, delete_entities
 from ..services.chase import latest_chase_map
 
 router = APIRouter(prefix="/people", tags=["people"])
@@ -38,12 +39,17 @@ def update_person(person_id: int, body: PersonPatch, db: Session = Depends(get_d
     return person
 
 
+@router.get("/{person_id}/references")
+def person_references(person_id: int, db: Session = Depends(get_db)):
+    """What deleting this person would leave unowned."""
+    if not db.get(Person, person_id):
+        raise HTTPException(404)
+    return check_references(db, "person", [person_id])
+
+
 @router.delete("/{person_id}", status_code=204)
 def delete_person(person_id: int, db: Session = Depends(get_db)):
-    person = db.get(Person, person_id)
-    if person:
-        db.delete(person)
-        db.commit()
+    delete_entities(db, "person", [person_id])
 
 
 @router.get("/{person_id}/pack")

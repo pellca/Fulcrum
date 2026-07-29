@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import Workstream
 from ..schemas import WorkstreamIn, WorkstreamOut, WorkstreamPatch
+from ..services.bulk import delete_entities
 
 router = APIRouter(prefix="/workstreams", tags=["workstreams"])
 
@@ -37,7 +38,4 @@ def update_workstream(ws_id: int, body: WorkstreamPatch, db: Session = Depends(g
 
 @router.delete("/{ws_id}", status_code=204)
 def delete_workstream(ws_id: int, db: Session = Depends(get_db)):
-    workstream = db.get(Workstream, ws_id)
-    if workstream:
-        db.delete(workstream)
-        db.commit()
+    delete_entities(db, "workstream", [ws_id])

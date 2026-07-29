@@ -5,9 +5,11 @@ import { toast } from 'sonner'
 import { Download, Plus } from 'lucide-react'
 import { api, type Commitment, type Person, type Topic, type Workstream } from '../api'
 import { ImportCsvButton } from '../components/CsvImport'
+import { BulkBar, SelectCheckbox, useSelection, type Id } from '../components/BulkSelect'
 import {
   Badge,
   Button,
+  cn,
   dueTone,
   EmptyState,
   Field,
@@ -32,6 +34,7 @@ export default function Topics() {
   const [creating, setCreating] = useState(false)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
+  const selection = useSelection()
 
   useEffect(() => {
     const open = Number(searchParams.get('open'))
@@ -60,20 +63,31 @@ export default function Topics() {
                 <Download size={15} /> Template
               </Button>
             </a>
-            <ImportCsvButton />
+            <ImportCsvButton defaultType="topic" />
             <Button onClick={() => setCreating(true)}>
               <Plus size={15} /> New topic
             </Button>
           </>
         }
       />
-      <div className="mb-4">
+      <div className="mb-4 flex items-center gap-3">
         <Select value={status} onChange={(e) => setStatus(e.target.value)} className="!w-40">
           <option value="">Any status</option>
           {TOPIC_STATUSES.map((s) => (
             <option key={s}>{s}</option>
           ))}
         </Select>
+        {(topics?.length ?? 0) > 0 && (
+          <label className="flex cursor-pointer items-center gap-1.5 text-[13px] text-slate-600 dark:text-slate-300">
+            <SelectCheckbox
+              checked={Boolean(topics?.length) && topics!.every((t) => selection.selected.has(t.id))}
+              indeterminate={topics?.some((t) => selection.selected.has(t.id))}
+              onChange={() => selection.toggleAll((topics ?? []).map((t) => t.id as Id))}
+              label="Select all topics"
+            />
+            Select all
+          </label>
+        )}
       </div>
 
       {isLoading ? (
@@ -86,10 +100,24 @@ export default function Topics() {
             <button
               key={topic.id}
               onClick={() => setSelectedId(topic.id)}
-              className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-colors hover:border-indigo-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-700"
+              className={cn(
+                'rounded-xl border bg-white p-4 text-left shadow-sm transition-colors hover:border-indigo-300 dark:bg-slate-900 dark:hover:border-indigo-700',
+                selection.selected.has(topic.id)
+                  ? 'border-indigo-400 dark:border-indigo-600'
+                  : 'border-slate-200 dark:border-slate-800',
+              )}
             >
               <div className="mb-2 flex items-start justify-between gap-2">
-                <span className="text-[13px] leading-snug font-semibold">{topic.title}</span>
+                <span className="flex min-w-0 items-start gap-2">
+                  <span className="mt-0.5">
+                    <SelectCheckbox
+                      checked={selection.selected.has(topic.id)}
+                      onChange={() => selection.toggle(topic.id)}
+                      label={`Select ${topic.title}`}
+                    />
+                  </span>
+                  <span className="text-[13px] leading-snug font-semibold">{topic.title}</span>
+                </span>
                 <StatusBadge status={topic.status} />
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -108,8 +136,10 @@ export default function Topics() {
         </div>
       )}
 
+      <BulkBar type="topic" ids={[...selection.selected]} onClear={selection.clear} />
+
       {selectedId && (
-        <TopicDrawer id={selectedId} onClose={() => setSelectedId(null)} people={people} workstreams={workstreams} />
+        <TopicDrawer key={selectedId} id={selectedId} onClose={() => setSelectedId(null)} people={people} workstreams={workstreams} />
       )}
       <CreateTopicModal open={creating} onClose={() => setCreating(false)} people={people} workstreams={workstreams} />
     </div>

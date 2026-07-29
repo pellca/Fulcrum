@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Plus } from 'lucide-react'
 import { CopyCopilotPromptButton, ImportCsvButton } from '../components/CsvImport'
+import { BulkBar, SelectAllHeader, SelectCheckbox, useSelection, type Id } from '../components/BulkSelect'
 import { api, type Action, type Commitment, type Person, type Workstream } from '../api'
 import {
   Badge,
@@ -36,6 +37,7 @@ export default function Register() {
   const [selected, setSelected] = useState<{ kind: Tab; id: number } | null>(null)
   const [creating, setCreating] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
+  const selection = useSelection()
 
   // deep links: ?open=action-12 opens a drawer; ?owner=3 / ?workstream=2 pre-filter
   useEffect(() => {
@@ -108,6 +110,7 @@ export default function Register() {
               onClick={() => {
                 setTab(t)
                 setFilters((f) => ({ ...f, status: '', origin: '' }))
+                selection.clear()
               }}
               className={cn(
                 'rounded-md px-3 py-1.5 text-[13px] font-medium capitalize transition-colors',
@@ -165,19 +168,20 @@ export default function Register() {
 
       {loading ? (
         <Spinner />
-      ) : tab === 'actions' ? (
-        <ItemTable
-          rows={actions ?? []}
-          kind="actions"
-          onSelect={(id) => setSelected({ kind: 'actions', id })}
-        />
       ) : (
         <ItemTable
-          rows={commitments ?? []}
-          kind="commitments"
-          onSelect={(id) => setSelected({ kind: 'commitments', id })}
+          rows={(tab === 'actions' ? actions : commitments) ?? []}
+          kind={tab}
+          onSelect={(id) => setSelected({ kind: tab, id })}
+          selection={selection}
         />
       )}
+
+      <BulkBar
+        type={tab === 'actions' ? 'action' : 'commitment'}
+        ids={[...selection.selected]}
+        onClear={selection.clear}
+      />
 
       {selected?.kind === 'actions' && (
         <ActionDrawer
@@ -214,10 +218,12 @@ function ItemTable({
   rows,
   kind,
   onSelect,
+  selection,
 }: {
   rows: (Action | Commitment)[]
   kind: Tab
   onSelect: (id: number) => void
+  selection: ReturnType<typeof useSelection>
 }) {
   if (rows.length === 0)
     return (
@@ -226,11 +232,15 @@ function ItemTable({
         hint="Use the quick-add bar at the top (Ctrl+K) to capture items as you hear them."
       />
     )
+  const ids: Id[] = rows.map((row) => row.id)
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <table className="w-full text-left text-[13px]">
         <thead>
           <tr className="border-b border-slate-100 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+            <th className="w-8 px-3 py-2.5">
+              <SelectAllHeader ids={ids} selected={selection.selected} onToggleAll={selection.toggleAll} />
+            </th>
             <th className="px-4 py-2.5 font-medium">Title</th>
             <th className="px-3 py-2.5 font-medium">Owner</th>
             <th className="px-3 py-2.5 font-medium">Workstream</th>
@@ -246,8 +256,18 @@ function ItemTable({
             <tr
               key={row.id}
               onClick={() => onSelect(row.id)}
-              className="cursor-pointer transition-colors hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20"
+              className={cn(
+                'cursor-pointer transition-colors hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20',
+                selection.selected.has(row.id) && 'bg-indigo-50/70 dark:bg-indigo-950/30',
+              )}
             >
+              <td className="px-3 py-2.5">
+                <SelectCheckbox
+                  checked={selection.selected.has(row.id)}
+                  onChange={() => selection.toggle(row.id)}
+                  label={`Select ${row.title}`}
+                />
+              </td>
               <td className="max-w-md truncate px-4 py-2.5 font-medium">{row.title}</td>
               <td className="px-3 py-2.5 whitespace-nowrap text-slate-600 dark:text-slate-300">{row.owner?.name ?? '—'}</td>
               <td className="px-3 py-2.5 whitespace-nowrap">

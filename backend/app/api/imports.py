@@ -19,12 +19,14 @@ router = APIRouter(prefix="/imports", tags=["imports"])
 
 
 @router.post("/planner/preview")
-async def planner_preview(file: UploadFile, db: Session = Depends(get_db)):
+async def planner_preview(
+    file: UploadFile, default_type: str | None = None, db: Session = Depends(get_db)
+):
     content = await file.read()
     name = (file.filename or "").lower()
     try:
         rows = rows_from_xlsx(content) if name.endswith((".xlsx", ".xlsm")) else rows_from_csv(content)
-        return preview_import(db, rows)
+        return preview_import(db, rows, default_type)
     except ValueError as exc:
         raise HTTPException(422, str(exc))
     except Exception as exc:
