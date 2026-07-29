@@ -177,6 +177,7 @@ export default function MeetingDetail() {
                           <div className="mt-1 flex flex-wrap items-center gap-1">
                             <Badge tone={intentTone[topic.intent]}>{topic.intent}</Badge>
                             <Badge tone="slate">{topic.duration_minutes}m</Badge>
+                            {topic.recurring && <Badge tone="amber">standing</Badge>}
                             {topic.sponsor && <Badge tone="slate">{topic.sponsor.name}</Badge>}
                             {topic.target_by && <Badge tone="amber">by {fmtDate(topic.target_by)}</Badge>}
                           </div>
@@ -283,6 +284,7 @@ function SortableAgendaRow({
           <div className="truncate text-[13px] font-medium">{item.topic.title}</div>
           <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
             <Badge tone={intentTone[item.topic.intent]}>{item.topic.intent}</Badge>
+            {item.topic.recurring && <Badge tone="amber">standing</Badge>}
             {item.topic.sponsor && <span>{item.topic.sponsor.name}</span>}
           </div>
         </div>

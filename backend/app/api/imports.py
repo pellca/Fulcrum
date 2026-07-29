@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..services.copilot_prompt import build_prompt
+from ..services.people_import import commit_people, preview_people
 from ..services.planner_import import (
     TEMPLATES,
     commit_import,
@@ -44,6 +45,28 @@ def planner_commit(body: CommitIn, db: Session = Depends(get_db)):
 @router.get("/copilot-prompt", response_class=PlainTextResponse)
 def copilot_prompt(db: Session = Depends(get_db)):
     return build_prompt(db)
+
+
+@router.post("/people/preview")
+async def people_preview(file: UploadFile, db: Session = Depends(get_db)):
+    content = await file.read()
+    name = (file.filename or "").lower()
+    try:
+        rows = rows_from_xlsx(content) if name.endswith((".xlsx", ".xlsm")) else rows_from_csv(content)
+        return preview_people(db, rows)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    except Exception as exc:
+        raise HTTPException(422, f"Could not read file: {exc}")
+
+
+class PeopleCommitIn(BaseModel):
+    items: list[dict]
+
+
+@router.post("/people/commit")
+def people_commit(body: PeopleCommitIn, db: Session = Depends(get_db)):
+    return commit_people(db, body.items)
 
 
 @router.get("/templates/{name}", response_class=PlainTextResponse)

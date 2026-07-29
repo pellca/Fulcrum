@@ -6,7 +6,10 @@ import { api, type Meeting } from '../api'
 import { Badge, Button, Field, fmtDate, Modal, Select, cn } from './ui'
 
 interface PreviewItem {
-  type: 'action' | 'commitment'
+  type: 'action' | 'commitment' | 'topic'
+  intent?: string
+  duration_minutes?: number
+  recurring?: boolean
   title: string
   description: string | null
   owner_id: number | null
@@ -75,12 +78,17 @@ export function ImportCsvButton() {
 
   const commit = useMutation({
     mutationFn: () =>
-      api.post<{ created: { actions: number; commitments: number; meeting_links: number } }>(
+      api.post<{ created: { actions: number; commitments: number; topics: number; meeting_links: number } }>(
         '/imports/planner/commit',
         { items: preview!.items, default_meeting_id: defaultMeeting ? Number(defaultMeeting) : null },
       ),
     onSuccess: ({ created }) => {
-      toast.success(`Imported ${created.actions} actions, ${created.commitments} commitments`, {
+      const parts = [
+        created.actions && `${created.actions} actions`,
+        created.commitments && `${created.commitments} commitments`,
+        created.topics && `${created.topics} topics`,
+      ].filter(Boolean)
+      toast.success(`Imported ${parts.join(', ') || 'nothing'}`, {
         description: created.meeting_links ? `${created.meeting_links} linked to their source meeting.` : undefined,
       })
       setPreview(null)
@@ -128,10 +136,13 @@ export function ImportCsvButton() {
                 {preview.items.map((item, index) => (
                   <tr key={index}>
                     <td className="px-3 py-2">
-                      <Badge tone={item.type === 'commitment' ? 'indigo' : 'blue'}>{item.type}</Badge>
+                      <Badge tone={item.type === 'commitment' ? 'indigo' : item.type === 'topic' ? 'violet' : 'blue'}>
+                        {item.type}
+                      </Badge>
                     </td>
                     <td className="max-w-56 truncate px-3 py-2 font-medium" title={item.description ?? undefined}>
                       {item.title}
+                      {item.recurring && <Badge tone="amber" className="ml-1.5">recurring</Badge>}
                     </td>
                     <td className={cn('px-3 py-2 whitespace-nowrap', !item.owner_matched && 'text-amber-600 dark:text-amber-400')}>
                       {item.owner_name ?? '—'}
@@ -139,7 +150,9 @@ export function ImportCsvButton() {
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">{item.workstream_name ?? '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.due_date)}</td>
-                    <td className="px-3 py-2">{item.priority}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {item.type === 'topic' ? `${item.intent} · ${item.duration_minutes}m` : item.priority}
+                    </td>
                     <td className={cn('max-w-40 truncate px-3 py-2', !item.meeting_matched && 'text-amber-600 dark:text-amber-400')}>
                       {item.meeting_label ?? '—'}
                     </td>

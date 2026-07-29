@@ -56,25 +56,34 @@ def score_topic(topic: Topic, meeting_date: date, hard_dates_by_ws: dict[int, li
                 reasons.append(f"Hard deadline nearby: {kd.title} ({kd.date.isoformat()})")
                 break
 
+    if topic.recurring:
+        score += 15
+        reasons.append("Standing item")
+
     if topic.status == "parked":
         score += 5
         reasons.append("Previously parked")
 
-    created = topic.created_at or utcnow()
-    age_weeks = max((utcnow() - created).days, 0) // 7
-    if age_weeks >= 1:
-        staleness = min(age_weeks * 2, 10)
-        score += staleness
-        reasons.append(f"Waiting {age_weeks}w for a slot")
+    # staleness pressure doesn't apply to standing items — they get slots routinely
+    if not topic.recurring:
+        created = topic.created_at or utcnow()
+        age_weeks = max((utcnow() - created).days, 0) // 7
+        if age_weeks >= 1:
+            staleness = min(age_weeks * 2, 10)
+            score += staleness
+            reasons.append(f"Waiting {age_weeks}w for a slot")
 
     return score, reasons
 
 
 def rank_candidates(db: Session, meeting_at: datetime) -> list[tuple[Topic, float, list[str]]]:
     meeting_date = meeting_at.date()
+    from sqlalchemy import or_
+
+    # recurring topics stay candidates whatever their status — they're never "used up"
     topics = (
         db.query(Topic)
-        .filter(Topic.status.in_(["proposed", "parked"]))
+        .filter(or_(Topic.status.in_(["proposed", "parked"]), Topic.recurring.is_(True)))
         .all()
     )
     hard_dates = db.query(KeyDate).filter(KeyDate.hard.is_(True)).all()

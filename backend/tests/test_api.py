@@ -91,6 +91,74 @@ def test_capacity_heatmap(client):
     assert totals == sorted(totals, reverse=True)
 
 
+def test_topic_csv_import_and_recurring_agenda(client):
+    client.post("/api/people", json={"name": "Priya Shah"})
+    csv_content = (
+        "type,title,description,intent,duration_minutes,owner,due,readiness,recurring\n"
+        "topic,Monthly Performance Review,Standing MI review,inform,20,Priya Shah,,ready,yes\n"
+        "topic,One-off deep dive,,decide,30,Priya Shah,2026-08-20,ready,\n"
+    )
+    preview = client.post(
+        "/api/imports/planner/preview", files={"file": ("topics.csv", csv_content, "text/csv")}
+    ).json()
+    assert [i["type"] for i in preview["items"]] == ["topic", "topic"]
+    assert preview["items"][0]["recurring"] is True and preview["items"][0]["duration_minutes"] == 20
+
+    result = client.post("/api/imports/planner/commit", json={"items": preview["items"]}).json()
+    assert result["created"]["topics"] == 2
+
+    topics = {t["title"]: t for t in client.get("/api/topics").json()}
+    standing = topics["Monthly Performance Review"]
+    assert standing["recurring"] is True and standing["readiness"] == "ready"
+
+    # recurring topic stays a candidate across meetings; one-off is consumed
+    forum_id = client.post("/api/forums", json={"name": "Monthly Session", "capacity_minutes": 60}).json()["id"]
+    m1 = client.post("/api/meetings", json={"forum_id": forum_id, "scheduled_at": "2026-08-03T10:00:00"}).json()["id"]
+    m2 = client.post("/api/meetings", json={"forum_id": forum_id, "scheduled_at": "2026-09-07T10:00:00"}).json()["id"]
+
+    client.post(f"/api/meetings/{m1}/agenda", json={"topic_id": standing["id"]})
+    client.post(f"/api/meetings/{m1}/agenda", json={"topic_id": topics["One-off deep dive"]["id"]})
+    assert client.get(f"/api/topics").json()  # sanity
+    m2_candidates = {c["topic"]["title"]: c for c in client.get(f"/api/meetings/{m2}/candidates").json()}
+    assert "Monthly Performance Review" in m2_candidates
+    assert "Standing item" in m2_candidates["Monthly Performance Review"]["reasons"]
+    assert "One-off deep dive" not in m2_candidates
+    # status untouched for the standing item, consumed for the one-off
+    topics_after = {t["title"]: t for t in client.get("/api/topics").json()}
+    assert topics_after["Monthly Performance Review"]["status"] == "proposed"
+    assert topics_after["One-off deep dive"]["status"] == "scheduled"
+    # and it can be added to the second meeting too
+    assert client.post(f"/api/meetings/{m2}/agenda", json={"topic_id": standing["id"]}).status_code == 200
+
+
+def test_people_csv_import(client):
+    client.post("/api/people", json={"name": "Sarah Chen"})
+    csv_content = (
+        "name,email,team,role,is_bpm,aliases\n"
+        "Sarah Chen,sarah@bank.com,Credit,Audit Director,,Chen Sarah\n"
+        "New Bpm,bpm@bank.com,COO,Business Manager,yes,NB;Bpm New\n"
+        "New Bpm,dupe@bank.com,,,,\n"
+        ",,,,,\n"
+    )
+    preview = client.post(
+        "/api/imports/people/preview", files={"file": ("people.csv", csv_content, "text/csv")}
+    ).json()
+    assert preview["skipped"] == 1  # in-file duplicate (fully blank rows are dropped pre-parse)
+    by_name = {i["name"]: i for i in preview["items"]}
+    assert by_name["Sarah Chen"]["exists"] is True
+    assert by_name["New Bpm"]["exists"] is False and by_name["New Bpm"]["is_bpm"] is True
+
+    result = client.post("/api/imports/people/commit", json={"items": preview["items"]}).json()
+    assert result == {"created": 1, "skipped_existing": 1, "aliases_added": 3}
+
+    people = {p["name"]: p for p in client.get("/api/people").json()}
+    assert people["New Bpm"]["is_bpm"] is True
+    assert {a["alias"] for a in people["Sarah Chen"]["aliases"]} == {"Chen Sarah"}
+    # re-import is idempotent
+    again = client.post("/api/imports/people/commit", json={"items": preview["items"]}).json()
+    assert again["created"] == 0 and again["aliases_added"] == 0
+
+
 def test_convert_action_and_commitment(client):
     client.post("/api/people", json={"name": "Sarah Chen"})
     person_id = client.get("/api/people").json()[0]["id"]
@@ -221,7 +289,7 @@ def test_copilot_csv_with_types_and_meeting_links(client):
         "/api/imports/planner/commit",
         json={"items": preview["items"], "default_meeting_id": meeting_id},
     ).json()
-    assert result["created"] == {"actions": 1, "commitments": 1, "meeting_links": 2}
+    assert result["created"] == {"actions": 1, "commitments": 1, "topics": 0, "meeting_links": 2}
 
     commitment = client.get("/api/commitments").json()[0]
     links = client.get(f"/api/links/for/commitment/{commitment['id']}").json()

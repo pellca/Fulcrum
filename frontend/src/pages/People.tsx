@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { NotebookTabs, Plus, X } from 'lucide-react'
+import { Download, NotebookTabs, Plus, X } from 'lucide-react'
+import { PeopleImportButton } from '../components/PeopleImport'
 import { api, type Person, type Workstream } from '../api'
 import {
   Badge,
@@ -29,9 +30,21 @@ export default function People() {
         title="People & workstreams"
         subtitle="Who owns things, and the streams of work they sit in"
         actions={
-          <Button onClick={() => setCreating(true)}>
-            <Plus size={15} /> New {tab === 'people' ? 'person' : 'workstream'}
-          </Button>
+          <>
+            {tab === 'people' && (
+              <>
+                <a href="/api/imports/templates/people" download>
+                  <Button variant="ghost" title="Download the CSV template for people">
+                    <Download size={15} /> Template
+                  </Button>
+                </a>
+                <PeopleImportButton />
+              </>
+            )}
+            <Button onClick={() => setCreating(true)}>
+              <Plus size={15} /> New {tab === 'people' ? 'person' : 'workstream'}
+            </Button>
+          </>
         }
       />
       <div className="mb-4 flex rounded-lg border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900" style={{ width: 'fit-content' }}>

@@ -277,6 +277,7 @@ class TopicMini(ORMModel):
     intent: str
     duration_minutes: int
     readiness: str
+    recurring: bool = False
     sponsor: Optional[PersonMini]
     workstream: Optional[WorkstreamMini]
 
@@ -312,6 +313,7 @@ class TopicIn(BaseModel):
     commitment_id: Optional[int] = None
     readiness: Literal["draft", "ready"] = "draft"
     status: Literal["proposed", "scheduled", "discussed", "parked"] = "proposed"
+    recurring: bool = False
     target_by: Optional[date] = None
     papers_url: Optional[str] = None
 
@@ -326,6 +328,7 @@ class TopicPatch(BaseModel):
     commitment_id: Optional[int] = None
     readiness: Optional[Literal["draft", "ready"]] = None
     status: Optional[Literal["proposed", "scheduled", "discussed", "parked"]] = None
+    recurring: Optional[bool] = None
     target_by: Optional[date] = None
     papers_url: Optional[str] = None
 
@@ -338,6 +341,7 @@ class TopicOut(ORMModel):
     duration_minutes: int
     readiness: str
     status: str
+    recurring: bool = False
     target_by: Optional[date]
     papers_url: Optional[str]
     sponsor: Optional[PersonMini]

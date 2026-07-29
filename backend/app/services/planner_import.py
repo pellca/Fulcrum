@@ -14,8 +14,11 @@ from datetime import date, datetime
 
 from sqlalchemy.orm import Session
 
-from ..models import Action, Commitment, Forum, Link, Meeting
+from ..models import Action, Commitment, Forum, Link, Meeting, Topic
 from .quickadd import ORIGINS, find_person, find_workstream
+
+INTENTS = {"decide", "inform", "consult", "shape"}
+TRUTHY = {"true", "yes", "y", "1", "recurring"}
 
 PROGRESS_MAP = {
     "not started": "todo",
@@ -42,6 +45,10 @@ HEADER_ALIASES = {
     "workstream": ["bucket name", "workstream", "bucket"],
     "origin": ["origin"],
     "meeting": ["meeting", "source meeting", "forum"],
+    "intent": ["intent"],
+    "duration": ["duration_minutes", "duration", "minutes"],
+    "readiness": ["readiness"],
+    "recurring": ["recurring", "standing"],
 }
 
 
@@ -140,7 +147,7 @@ def preview_import(db: Session, rows: list[list[str]]) -> dict:
             skipped += 1
             continue
         item_type = cell("type").lower()
-        if item_type not in ("action", "commitment"):
+        if item_type not in ("action", "commitment", "topic"):
             item_type = "action"
         owner_name = cell("owner").split(";")[0].strip()
         owner = find_person(db, owner_name) if owner_name else None
@@ -166,27 +173,53 @@ def preview_import(db: Session, rows: list[list[str]]) -> dict:
                 "status": PROGRESS_MAP.get(cell("status").lower(), "todo"),
                 "priority": PRIORITY_MAP.get(cell("priority").lower(), "medium"),
                 "origin": origin if origin in ORIGINS else "principal",
+                "intent": cell("intent").lower() if cell("intent").lower() in INTENTS else "inform",
+                "duration_minutes": int(cell("duration")) if cell("duration").isdigit() else 15,
+                "readiness": "ready" if cell("readiness").lower() == "ready" else "draft",
+                "recurring": cell("recurring").lower() in TRUTHY,
             }
         )
     return {"columns": {k: rows[0][v] for k, v in mapping.items()}, "items": items, "skipped": skipped}
 
 
 def commit_import(db: Session, items: list[dict], default_meeting_id: int | None = None) -> dict:
-    created = {"actions": 0, "commitments": 0, "meeting_links": 0}
+    created = {"actions": 0, "commitments": 0, "topics": 0, "meeting_links": 0}
     for item in items:
-        common = dict(
-            title=item["title"],
-            description=item.get("description"),
-            owner_id=item.get("owner_id"),
-            workstream_id=item.get("workstream_id"),
-            due_date=date.fromisoformat(item["due_date"]) if item.get("due_date") else None,
-            priority=item.get("priority", "medium"),
-        )
-        if item.get("type") == "commitment":
-            row = Commitment(**common, origin=item.get("origin", "principal"))
+        due = date.fromisoformat(item["due_date"]) if item.get("due_date") else None
+        if item.get("type") == "topic":
+            row = Topic(
+                title=item["title"],
+                description=item.get("description"),
+                sponsor_id=item.get("owner_id"),
+                workstream_id=item.get("workstream_id"),
+                target_by=due,
+                intent=item.get("intent", "inform"),
+                duration_minutes=item.get("duration_minutes", 15),
+                readiness=item.get("readiness", "draft"),
+                recurring=bool(item.get("recurring")),
+            )
+            created["topics"] += 1
+        elif item.get("type") == "commitment":
+            row = Commitment(
+                title=item["title"],
+                description=item.get("description"),
+                owner_id=item.get("owner_id"),
+                workstream_id=item.get("workstream_id"),
+                due_date=due,
+                priority=item.get("priority", "medium"),
+                origin=item.get("origin", "principal"),
+            )
             created["commitments"] += 1
         else:
-            row = Action(**common, status=item.get("status", "todo"))
+            row = Action(
+                title=item["title"],
+                description=item.get("description"),
+                owner_id=item.get("owner_id"),
+                workstream_id=item.get("workstream_id"),
+                due_date=due,
+                priority=item.get("priority", "medium"),
+                status=item.get("status", "todo"),
+            )
             created["actions"] += 1
         db.add(row)
 
@@ -211,8 +244,9 @@ def commit_import(db: Session, items: list[dict], default_meeting_id: int | None
 TEMPLATES = {
     "actions": ["type", "title", "description", "owner", "workstream", "due", "status", "priority", "meeting"],
     "commitments": ["type", "title", "description", "owner", "workstream", "due", "origin", "priority", "meeting"],
-    "topics": ["title", "description", "intent", "duration_minutes", "owner", "workstream", "due"],
+    "topics": ["type", "title", "description", "intent", "duration_minutes", "owner", "workstream", "due", "readiness", "recurring"],
     "key_dates": ["title", "due", "kind", "hard", "workstream", "description"],
+    "people": ["name", "email", "team", "role", "is_bpm", "aliases"],
 }
 
 

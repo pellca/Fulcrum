@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus } from 'lucide-react'
+import { Download, Plus } from 'lucide-react'
 import { api, type Commitment, type Person, type Topic, type Workstream } from '../api'
+import { ImportCsvButton } from '../components/CsvImport'
 import {
   Badge,
   Button,
@@ -53,9 +54,17 @@ export default function Topics() {
         title="Topics"
         subtitle="Discussion items competing for meeting time"
         actions={
-          <Button onClick={() => setCreating(true)}>
-            <Plus size={15} /> New topic
-          </Button>
+          <>
+            <a href="/api/imports/templates/topics" download>
+              <Button variant="ghost" title="Download the CSV template for topics">
+                <Download size={15} /> Template
+              </Button>
+            </a>
+            <ImportCsvButton />
+            <Button onClick={() => setCreating(true)}>
+              <Plus size={15} /> New topic
+            </Button>
+          </>
         }
       />
       <div className="mb-4">
@@ -87,6 +96,7 @@ export default function Topics() {
                 <Badge tone={intentTone[topic.intent]}>{topic.intent}</Badge>
                 <Badge tone={topic.readiness === 'ready' ? 'green' : 'slate'}>{topic.readiness}</Badge>
                 <Badge tone="slate">{topic.duration_minutes} min</Badge>
+                {topic.recurring && <Badge tone="amber">recurring</Badge>}
                 {topic.target_by && <Badge tone={dueTone(topic.target_by)}>by {fmtDate(topic.target_by)}</Badge>}
               </div>
               <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
@@ -154,6 +164,16 @@ function TopicDrawer({ id, onClose, people, workstreams }: { id: number; onClose
             {TOPIC_STATUSES.map((s) => (
               <option key={s}>{s}</option>
             ))}
+          </Select>
+        </Field>
+        <Field label="Recurring (standing item)">
+          <Select
+            value={item.recurring ? 'yes' : 'no'}
+            onChange={(e) => patch.mutate({ recurring: e.target.value === 'yes' })}
+            title="Recurring topics stay available as agenda candidates for every meeting"
+          >
+            <option value="no">No — one-off</option>
+            <option value="yes">Yes — reusable every meeting</option>
           </Select>
         </Field>
         <Field label="Sponsor">
@@ -231,6 +251,7 @@ function CreateTopicModal({ open, onClose, people, workstreams }: { open: boolea
         workstream_id: form.workstream_id ? Number(form.workstream_id) : null,
         readiness: form.readiness || 'draft',
         target_by: form.target_by || null,
+        recurring: form.recurring === 'yes',
       }),
     onSuccess: () => {
       toast.success('Topic created')
@@ -289,6 +310,12 @@ function CreateTopicModal({ open, onClose, people, workstreams }: { open: boolea
           </Field>
           <Field label="Target by">
             <Input type="date" value={form.target_by ?? ''} onChange={set('target_by')} />
+          </Field>
+          <Field label="Recurring (standing item)">
+            <Select value={form.recurring ?? 'no'} onChange={set('recurring')}>
+              <option value="no">No — one-off</option>
+              <option value="yes">Yes — reusable every meeting</option>
+            </Select>
           </Field>
         </div>
         <div className="flex justify-end gap-2 pt-1">

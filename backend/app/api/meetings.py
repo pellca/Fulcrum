@@ -150,7 +150,8 @@ def add_agenda_item(meeting_id: int, body: AgendaItemIn, db: Session = Depends(g
             allocated_minutes=body.allocated_minutes or topic.duration_minutes,
         )
     )
-    topic.status = "scheduled"
+    if not topic.recurring:  # standing items are never consumed by one agenda
+        topic.status = "scheduled"
     db.commit()
     db.refresh(meeting)
     return meeting

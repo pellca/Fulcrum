@@ -39,6 +39,7 @@ def init_db() -> None:
 # columns added after a table first shipped; create_all won't add them to existing DBs
 _COLUMN_MIGRATIONS = [
     ("decision", "review_on", "DATE"),
+    ("topic", "recurring", "BOOLEAN DEFAULT 0"),
 ]
 
 

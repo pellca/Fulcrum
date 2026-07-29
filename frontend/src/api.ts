@@ -134,6 +134,7 @@ export interface Topic {
   duration_minutes: number
   readiness: string
   status: string
+  recurring: boolean
   target_by: string | null
   papers_url: string | null
   sponsor: PersonMini | null
@@ -154,6 +155,7 @@ export interface AgendaItem {
     intent: string
     duration_minutes: number
     readiness: string
+    recurring: boolean
     sponsor: PersonMini | null
     workstream: WorkstreamMini | null
   }

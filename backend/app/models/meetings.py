@@ -71,6 +71,8 @@ class Topic(Base, TimestampMixin, DemoMixin):
     readiness: Mapped[str] = mapped_column(String(10), default="draft")
     # proposed | scheduled | discussed | parked
     status: Mapped[str] = mapped_column(String(20), default="proposed")
+    # standing item: stays a candidate for every meeting, never consumed by one agenda
+    recurring: Mapped[bool] = mapped_column(Boolean, default=False)
     target_by: Mapped[Optional[date]] = mapped_column(Date)
     papers_url: Mapped[Optional[str]] = mapped_column(String(500))
 
