@@ -11,6 +11,7 @@ IMPORTS_DIR = DATA_DIR / "imports"
 DB_PATH = Path(os.environ.get("FULCRUM_DB", DATA_DIR / "fulcrum.db"))
 MODULES_REGISTRY_DIR = REPO_ROOT / "modules" / "registry"
 FRONTEND_DIST = REPO_ROOT / "frontend" / "dist"
+MAIL_RETENTION_DAYS = int(os.environ.get("FULCRUM_MAIL_RETENTION_DAYS", "30"))
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 IMPORTS_DIR.mkdir(parents=True, exist_ok=True)

@@ -400,3 +400,25 @@ def test_templates_and_modules(client):
     assert client.post("/api/modules/diary-import/run", json={"args": {}}).status_code == 422
     # unavailable platform rejected
     assert client.post("/api/modules/outlook-diary-extractor/run", json={"args": {"mailbox": "x", "out_file": "y"}}).status_code == 409
+
+
+def test_unknown_api_paths_404_not_405_or_spa(client):
+    # unknown API path: 404 with a JSON detail, never the GET-only SPA fallback
+    unknown_get = client.get("/api/definitely-not-a-route")
+    assert unknown_get.status_code == 404
+    assert unknown_get.headers["content-type"].startswith("application/json")
+    assert "<html" not in unknown_get.text.lower()
+
+    # non-GET on an unknown path used to fall to the SPA catch-all and 405
+    for call in (
+        client.post("/api/definitely-not-a-route", json={}),
+        client.put("/api/definitely-not-a-route", json={}),
+        client.patch("/api/definitely-not-a-route", json={}),
+        client.delete("/api/definitely-not-a-route"),
+    ):
+        assert call.status_code == 404
+
+    # the guard must not shadow the docs/schema routes or any real endpoint
+    assert client.get("/api/docs").status_code == 200
+    assert client.get("/api/openapi.json").status_code == 200
+    assert client.get("/api/people").status_code == 200

@@ -505,5 +505,5 @@ class QuickAddIn(BaseModel):
 
 
 class ClearIn(BaseModel):
-    scope: Literal["all", "demo", "diary", "module_runs"]
+    scope: Literal["all", "demo", "diary", "mail", "module_runs"]
     confirm: str = Field(description='Must be the literal string "CLEAR"')

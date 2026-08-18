@@ -155,12 +155,24 @@ def _run_command(manifest: dict, args: dict[str, str], run_id: int) -> None:
     status = "succeeded" if process.returncode == 0 else "failed"
     _finish(run_id, status, f"\n[exit code {process.returncode}]\n", artifact=artifact)
 
-    if status == "succeeded" and manifest.get("ingest") == "diary" and artifact:
+    ingest = manifest.get("ingest")
+    if status == "succeeded" and ingest == "diary" and artifact:
         from ..services.diary_import import import_diary_file
 
         db = SessionLocal()
         try:
             summary = import_diary_file(db, artifact)
+            _append_log(run_id, "[ingest] " + json.dumps(summary) + "\n")
+        except Exception as exc:
+            _append_log(run_id, f"[ingest failed] {exc}\n")
+        finally:
+            db.close()
+    elif status == "succeeded" and ingest == "mail" and artifact:
+        from ..services.mail_import import import_mail_file
+
+        db = SessionLocal()
+        try:
+            summary = import_mail_file(db, artifact)
             _append_log(run_id, "[ingest] " + json.dumps(summary) + "\n")
         except Exception as exc:
             _append_log(run_id, f"[ingest failed] {exc}\n")

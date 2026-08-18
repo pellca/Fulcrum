@@ -358,6 +358,68 @@ export interface RiskChain {
   chain_length: number
 }
 
+export interface MailRecipient {
+  name: string | null
+  email: string | null
+}
+
+export type MailFolder = 'inbox' | 'sent'
+export type MailTriage = 'pending' | 'linked' | 'dismissed'
+
+export interface MailMessage {
+  id: number
+  message_id: string
+  conversation_id: string | null
+  folder: MailFolder
+  subject: string | null
+  sender_name: string | null
+  sender_email: string | null
+  to_recipients: MailRecipient[]
+  cc_recipients: MailRecipient[]
+  sent_at: string | null
+  received_at: string | null
+  occurred_date: string
+  body_text: string | null
+  has_attachments: boolean
+  triage: MailTriage
+  triaged_at: string | null
+  sender_person: PersonMini | null
+  matched_people: { id: number; name: string; email: string | null; matched_email: string }[]
+}
+
+export interface MailStats {
+  pending: number
+  linked: number
+  dismissed: number
+  total: number
+}
+
+export interface MailImportSummary {
+  added: number
+  updated: number
+  purged: number
+}
+
+export function listMailMessages(params: { days: number; folder?: MailFolder; triage?: MailTriage }) {
+  const search = new URLSearchParams()
+  search.set('days', String(params.days))
+  if (params.folder) search.set('folder', params.folder)
+  if (params.triage) search.set('triage', params.triage)
+  return api.get<MailMessage[]>(`/mail/messages?${search.toString()}`)
+}
+
+export function importMailPath(path: string) {
+  return api.post<MailImportSummary>('/mail/import', { path })
+}
+
+export function importMailUpload(file: File) {
+  return api.upload<MailImportSummary>('/mail/import-upload', file)
+}
+
+export function mailStats() {
+  return api.get<MailStats>('/mail/stats')
+}
+
 export interface TimelineData {
   from: string
   to: string

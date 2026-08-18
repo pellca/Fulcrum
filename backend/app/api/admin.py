@@ -4,12 +4,12 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
-from sqlalchemy import text
+from sqlalchemy import or_, text
 from sqlalchemy.orm import Session
 
 from ..config import DATA_DIR, DB_PATH
 from ..db import Base, engine, get_db
-from ..models import DiaryEvent, Link, Meeting, ModuleRun
+from ..models import DiaryEvent, Link, MailMessage, Meeting, ModuleRun
 from ..schemas import ClearIn
 from ..services.seed import load_demo
 from ..services.timeline import TITLE_RESOLVERS
@@ -106,6 +106,14 @@ def clear_data(body: ClearIn, db: Session = Depends(get_db)):
         deleted = db.query(DiaryEvent).delete()
         db.commit()
         return {"cleared": "diary", "rows": deleted}
+
+    if body.scope == "mail":
+        deleted = db.query(MailMessage).delete()
+        db.query(Link).filter(or_(Link.from_type == "mail", Link.to_type == "mail")).delete(
+            synchronize_session=False
+        )
+        db.commit()
+        return {"cleared": "mail", "rows": deleted}
 
     if body.scope == "module_runs":
         deleted = db.query(ModuleRun).delete()

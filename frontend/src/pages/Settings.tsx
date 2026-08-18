@@ -88,6 +88,7 @@ export default function SettingsPage() {
               <Select value={scope} onChange={(e) => setScope(e.target.value)} className="!w-64">
                 <option value="demo">Demo data only (real data untouched)</option>
                 <option value="diary">Imported diary events only</option>
+                <option value="mail">Mail only — imported mailbox messages</option>
                 <option value="module_runs">Module run history only</option>
                 <option value="all">Everything — full reset</option>
               </Select>

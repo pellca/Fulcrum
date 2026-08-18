@@ -1,0 +1,14 @@
+{
+  "name": "outlook-mail-extractor",
+  "label": "Outlook mail extractor",
+  "description": "Pull recent inbox/sent mail from the running desktop Outlook into mailbox.json, then ingest it. Requires Windows with Outlook signed in.",
+  "platform": "windows",
+  "command": ["python", "export_mail.py", "--days", "{days}", "--out", "{out_file}"],
+  "cwd": "C:/Dev/CoS/tools/mail_extractor",
+  "args": [
+    { "name": "days", "label": "Days of mail", "required": true, "default": "5" },
+    { "name": "out_file", "label": "Output mailbox.json path", "required": true, "default": "C:/mail/mailbox.json" }
+  ],
+  "artifact": "{out_file}",
+  "ingest": "mail"
+}

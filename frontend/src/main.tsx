@@ -12,6 +12,7 @@ import Meetings from './pages/Meetings'
 import MeetingDetail from './pages/MeetingDetail'
 import Planner from './pages/Planner'
 import Diary from './pages/Diary'
+import Mailbox from './pages/Mailbox'
 import People from './pages/People'
 import OneToOnePack from './pages/OneToOnePack'
 import Modules from './pages/Modules'
@@ -32,6 +33,7 @@ const router = createBrowserRouter([
       { path: '/meetings/:id', element: <MeetingDetail /> },
       { path: '/planner', element: <Planner /> },
       { path: '/diary', element: <Diary /> },
+      { path: '/mailbox', element: <Mailbox /> },
       { path: '/people', element: <People /> },
       { path: '/people/:id/pack', element: <OneToOnePack /> },
       { path: '/modules', element: <Modules /> },
