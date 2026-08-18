@@ -1,4 +1,4 @@
-const BASE = '/api'
+export const BASE = '/api'
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(BASE + path, {
@@ -483,6 +483,35 @@ export function mailDismiss(messageId: number) {
 
 export function mailReopen(messageId: number) {
   return api.post<{ triage: MailTriage }>(`/mail/${messageId}/reopen`)
+}
+
+export function getMailMessage(messageId: number) {
+  return api.get<MailMessage>(`/mail/messages/${messageId}`)
+}
+
+// ---------- register: search-all-open-items picker + export ----------
+
+export interface RegisterPickerItem {
+  type: MailSuggestionType
+  id: number
+  title: string
+  status: string
+  due_date: string | null
+  owner: PersonMini | null
+}
+
+export function registerPicker(q: string) {
+  const search = new URLSearchParams()
+  search.set('q', q)
+  return api.get<{ items: RegisterPickerItem[] }>(`/register/picker?${search.toString()}`)
+}
+
+export function registerExportUrl(params: { format: 'csv' | 'xlsx'; chases: boolean; links: boolean }) {
+  const search = new URLSearchParams()
+  search.set('format', params.format)
+  search.set('chases', String(params.chases))
+  search.set('links', String(params.links))
+  return `${BASE}/register/export?${search.toString()}`
 }
 
 export interface TimelineData {

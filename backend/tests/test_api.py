@@ -422,3 +422,89 @@ def test_unknown_api_paths_404_not_405_or_spa(client):
     assert client.get("/api/docs").status_code == 200
     assert client.get("/api/openapi.json").status_code == 200
     assert client.get("/api/people").status_code == 200
+
+
+# ---------- register picker ----------
+
+
+def test_register_picker_open_only_and_shape(client):
+    priya = client.post("/api/people", json={"name": "Priya Shah"}).json()
+    open_action = client.post(
+        "/api/actions", json={"title": "Budget review pack", "owner_id": priya["id"], "due_date": "2026-09-01"}
+    ).json()
+    client.post("/api/actions", json={"title": "Budget closed item", "status": "done"})
+    open_commitment = client.post("/api/commitments", json={"title": "Budget delivery commitment"}).json()
+    client.post("/api/commitments", json={"title": "Budget dropped commitment", "status": "dropped"})
+
+    resp = client.get("/api/register/picker?q=budget")
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["items"]
+    titles = {i["title"] for i in items}
+    assert "Budget closed item" not in titles
+    assert "Budget dropped commitment" not in titles
+
+    action_item = next(i for i in items if i["id"] == open_action["id"] and i["type"] == "action")
+    assert action_item == {
+        "type": "action",
+        "id": open_action["id"],
+        "title": "Budget review pack",
+        "status": "todo",
+        "due_date": "2026-09-01",
+        "owner": {"id": priya["id"], "name": "Priya Shah"},
+    }
+    commitment_item = next(
+        i for i in items if i["id"] == open_commitment["id"] and i["type"] == "commitment"
+    )
+    assert commitment_item["owner"] is None
+    assert commitment_item["due_date"] is None
+
+    # actions ordered before commitments
+    types_in_order = [i["type"] for i in items]
+    first_commitment_idx = types_in_order.index("commitment")
+    assert all(t == "action" for t in types_in_order[:first_commitment_idx])
+    assert all(t == "commitment" for t in types_in_order[first_commitment_idx:])
+
+
+def test_register_picker_matches_owner_name(client):
+    owner = client.post("/api/people", json={"name": "Zed Zephyr"}).json()
+    action = client.post(
+        "/api/actions", json={"title": "Totally unrelated title", "owner_id": owner["id"]}
+    ).json()
+    resp = client.get("/api/register/picker?q=Zephyr")
+    ids = {i["id"] for i in resp.json()["items"] if i["type"] == "action"}
+    assert action["id"] in ids
+
+
+def test_register_picker_short_query_returns_empty(client):
+    client.post("/api/actions", json={"title": "Anything"})
+    assert client.get("/api/register/picker?q=a").json() == {"items": []}
+    assert client.get("/api/register/picker").json() == {"items": []}
+
+
+def test_register_picker_limit_clamped(client):
+    for i in range(60):
+        client.post("/api/actions", json={"title": f"Clamp target {i:02d}"})
+    resp = client.get("/api/register/picker?q=Clamp&limit=1000")
+    assert len(resp.json()["items"]) == 50
+
+    resp_default = client.get("/api/register/picker?q=Clamp")
+    assert len(resp_default.json()["items"]) == 20
+
+
+def test_register_picker_reserves_commitment_slots(client):
+    # 20+ matching actions used to saturate the default limit and make a
+    # matching commitment unreachable in the results
+    for i in range(30):
+        client.post("/api/actions", json={"title": f"Reserve target {i:02d}"})
+    commitment = client.post("/api/commitments", json={"title": "Reserve target commitment"}).json()
+
+    resp = client.get("/api/register/picker?q=Reserve")
+    items = resp.json()["items"]
+    ids = {(i["type"], i["id"]) for i in items}
+    assert ("commitment", commitment["id"]) in ids
+    # actions still lead, commitments still trail, and title order holds
+    # within each group
+    types_in_order = [i["type"] for i in items]
+    first_commitment_idx = types_in_order.index("commitment")
+    assert all(t == "action" for t in types_in_order[:first_commitment_idx])
+    assert all(t == "commitment" for t in types_in_order[first_commitment_idx:])

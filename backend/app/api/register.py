@@ -2,12 +2,13 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased, joinedload
 
 from ..db import get_db
-from ..models import Action, Chase, Commitment, Link, PersonNote, Topic
+from ..models import Action, Chase, Commitment, Link, Person, PersonNote, Topic
 from ..schemas import (
     ActionIn,
     ActionOut,
@@ -22,8 +23,13 @@ from ..schemas import (
 from ..services.bulk import delete_entities
 from ..services.chase import latest_chase_map, next_chase_for
 from ..services.quickadd import parse_quickadd
+from ..services.register_export import build_export
+from .search import _like
 
 router = APIRouter(tags=["register"])
+
+PICKER_MAX_LIMIT = 50
+PICKER_DEFAULT_LIMIT = 20
 
 
 def _enrich_commitments(db: Session, rows: list[Commitment]) -> list[Commitment]:
@@ -41,6 +47,86 @@ def _enrich_actions(db: Session, rows: list[Action]) -> list[Action]:
         chase = latest.get(("action", row.id))
         row.next_chase_on = chase.next_chase_on if chase else None
     return rows
+
+
+@router.get("/register/picker")
+def picker(q: str = "", limit: int = PICKER_DEFAULT_LIMIT, db: Session = Depends(get_db)):
+    query = q.strip()
+    limit = max(1, min(PICKER_MAX_LIMIT, limit))
+    if len(query) < 2:
+        return {"items": []}
+
+    like = _like(query)
+
+    def item(kind: str, row) -> dict:
+        owner = row.owner
+        return {
+            "type": kind,
+            "id": row.id,
+            "title": row.title,
+            "status": row.status,
+            "due_date": row.due_date,
+            "owner": {"id": owner.id, "name": owner.name} if owner else None,
+        }
+
+    action_owner = aliased(Person)
+    actions = (
+        db.query(Action)
+        .options(joinedload(Action.owner))
+        .outerjoin(action_owner, Action.owner_id == action_owner.id)
+        .filter(Action.status.notin_(["done", "cancelled"]))
+        .filter(
+            or_(Action.title.ilike(like, escape="\\"), action_owner.name.ilike(like, escape="\\"))
+        )
+        .order_by(Action.title.asc())
+        .limit(limit)
+        .all()
+    )
+    commitment_owner = aliased(Person)
+    commitments = (
+        db.query(Commitment)
+        .options(joinedload(Commitment.owner))
+        .outerjoin(commitment_owner, Commitment.owner_id == commitment_owner.id)
+        .filter(Commitment.status.notin_(["delivered", "dropped"]))
+        .filter(
+            or_(
+                Commitment.title.ilike(like, escape="\\"),
+                commitment_owner.name.ilike(like, escape="\\"),
+            )
+        )
+        .order_by(Commitment.title.asc())
+        .limit(limit)
+        .all()
+    )
+
+    # actions typically far outnumber matching commitments, so a plain
+    # actions-first truncation to `limit` can saturate the whole page with
+    # actions and make a matching commitment unreachable -- reserve a slice
+    # of the limit for commitments before truncating either side
+    commitment_slots = min(len(commitments), max(1, limit // 4))
+    action_slots = limit - min(commitment_slots, len(commitments))
+    items = [item("action", row) for row in actions[:action_slots]] + [
+        item("commitment", row) for row in commitments[:commitment_slots]
+    ]
+    return {"items": items}
+
+
+@router.get("/register/export")
+def export_register(
+    format: str = "csv",
+    chases: bool = False,
+    links: bool = False,
+    db: Session = Depends(get_db),
+):
+    if format not in ("csv", "xlsx"):
+        raise HTTPException(422, "format must be 'csv' or 'xlsx'")
+    content, media_type, extension = build_export(db, format=format, chases=chases, links=links)
+    filename = f"fulcrum-register-{date.today().strftime('%Y%m%d')}.{extension}"
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/commitments", response_model=list[CommitmentOut])

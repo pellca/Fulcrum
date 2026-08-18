@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus } from 'lucide-react'
+import { Download, Plus } from 'lucide-react'
 import { CopyCopilotPromptButton, ImportCsvButton } from '../components/CsvImport'
 import { BulkBar, SelectAllHeader, SelectCheckbox, useSelection, type Id } from '../components/BulkSelect'
-import { api, type Action, type Commitment, type Person, type Workstream } from '../api'
+import { api, registerExportUrl, type Action, type Commitment, type Person, type Workstream } from '../api'
 import {
   Badge,
   Button,
@@ -36,6 +36,7 @@ export default function Register() {
   const [filters, setFilters] = useState({ status: '', owner_id: '', workstream_id: '', origin: '', openOnly: true })
   const [selected, setSelected] = useState<{ kind: Tab; id: number } | null>(null)
   const [creating, setCreating] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const selection = useSelection()
 
@@ -95,6 +96,9 @@ export default function Register() {
           <>
             <CopyCopilotPromptButton />
             <ImportCsvButton />
+            <Button variant="secondary" onClick={() => setExporting(true)}>
+              <Download size={15} /> Export
+            </Button>
             <Button onClick={() => setCreating(true)}>
               <Plus size={15} /> New {tab === 'actions' ? 'action' : 'commitment'}
             </Button>
@@ -210,6 +214,7 @@ export default function Register() {
         />
       )}
       <CreateModal open={creating} onClose={() => setCreating(false)} kind={tab} people={people} workstreams={workstreams} />
+      <ExportModal open={exporting} onClose={() => setExporting(false)} />
     </div>
   )
 }
@@ -659,6 +664,58 @@ function CreateModal({ open, onClose, kind, people, workstreams }: { open: boole
           </Button>
           <Button disabled={!form.title} onClick={() => create.mutate()}>
             Create
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function ExportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [format, setFormat] = useState<'xlsx' | 'csv'>('xlsx')
+  const [chases, setChases] = useState(true)
+  const [links, setLinks] = useState(true)
+
+  const download = () => {
+    // plain GET so the browser handles the download from the
+    // Content-Disposition header — not a fetch()
+    window.location.href = registerExportUrl({ format, chases, links })
+    onClose()
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Export register">
+      <div className="space-y-3">
+        <Field label="Format">
+          <Select value={format} onChange={(e) => setFormat(e.target.value as 'xlsx' | 'csv')}>
+            <option value="xlsx">Excel workbook (.xlsx)</option>
+            <option value="csv">CSV (zip)</option>
+          </Select>
+        </Field>
+        <label className="flex items-center gap-1.5 text-[13px] text-slate-600 dark:text-slate-300">
+          <input
+            type="checkbox"
+            checked={chases}
+            onChange={(e) => setChases(e.target.checked)}
+            className="rounded accent-indigo-600"
+          />
+          Include chase history
+        </label>
+        <label className="flex items-center gap-1.5 text-[13px] text-slate-600 dark:text-slate-300">
+          <input
+            type="checkbox"
+            checked={links}
+            onChange={(e) => setLinks(e.target.checked)}
+            className="rounded accent-indigo-600"
+          />
+          Include links &amp; dependencies
+        </label>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={download}>
+            <Download size={15} /> Download
           </Button>
         </div>
       </div>

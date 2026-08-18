@@ -266,6 +266,36 @@ def test_suggestions_ordering_top6_cap_and_zero_exclusion(client, tmp_path):
         assert s["score"] == 1.0
 
 
+# ---------- single message ----------
+
+
+def test_get_message_matches_list_shape(client, tmp_path):
+    sarah = _person(client, "Sarah Chen", "sarah.chen@bank.com")
+    mail = _import_and_get(
+        client, tmp_path,
+        _msg("m1", subject="Contract renewal", sender_name="Sarah Chen",
+             sender_email="sarah.chen@bank.com",
+             to=[{"name": "Sarah Chen", "email": "sarah.chen@bank.com"}]),
+    )
+
+    from_list = next(r for r in client.get("/api/mail/messages").json() if r["id"] == mail["id"])
+    resp = client.get(f"/api/mail/messages/{mail['id']}")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    assert body == from_list
+    assert body["sender_person"] == {"id": sarah["id"], "name": "Sarah Chen"}
+    assert body["matched_people"] == [
+        {"id": sarah["id"], "name": "Sarah Chen", "email": "sarah.chen@bank.com",
+         "matched_email": "sarah.chen@bank.com"}
+    ]
+
+
+def test_get_message_404_unknown(client):
+    resp = client.get("/api/mail/messages/999999")
+    assert resp.status_code == 404
+
+
 # ---------- log-chase ----------
 
 

@@ -11,7 +11,7 @@ Internal Audit & Investigations function.
 | Area | Capability |
 |---|---|
 | **Today** | Command dashboard: overdue items, chase queue, decision-ready topics, key dates, upcoming meetings with agenda-capacity bars |
-| **Register** | Single register of **commitments** (promises made to the principal / AET / regulators) and **actions** (the work delivering them), with owners, due dates, chase history and re-chase reminders |
+| **Register** | Single register of **commitments** (promises made to the principal / AET / regulators) and **actions** (the work delivering them), with owners, due dates, chase history and re-chase reminders; one-click export to Excel/CSV (with chase history and links) |
 | **Topics** | Discussion items competing for meeting time, with intent (decide / inform / consult / shape), duration and readiness |
 | **Meetings** | Forums (recurring governance meetings with a time budget) → meeting instances → **agenda builder** that *ranks* candidate topics with a transparent score and packs them into the capacity, drag-to-reorder, printable agenda, post-meeting decision capture that spawns follow-up actions |
 | **Planner** | Timeline of every moving part per workstream, hard external deadlines, dependency edges (`blocks` / `precedes`) and **risk chains** — anything downstream of a late/blocked/at-risk item is flagged |

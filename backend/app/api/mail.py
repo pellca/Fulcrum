@@ -190,6 +190,13 @@ async def import_from_upload(file: UploadFile, db: Session = Depends(get_db)):
         raise HTTPException(422, str(exc))
 
 
+@router.get("/messages/{mail_id}")
+def get_message(mail_id: int, db: Session = Depends(get_db)):
+    mail = _get_mail(db, mail_id)
+    person_map = _build_person_map(db, [mail])
+    return _serialize(mail, person_map)
+
+
 @router.get("/stats")
 def stats(db: Session = Depends(get_db)):
     since = (date.today() - timedelta(days=MAX_DAYS - 1)).isoformat()

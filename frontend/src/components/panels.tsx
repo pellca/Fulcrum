@@ -1,9 +1,11 @@
 import { useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Link2, Trash2, X } from 'lucide-react'
 import { api, type Chase, type LinkItem } from '../api'
 import { Badge, Button, cn, Field, fmtDate, Input, Select } from './ui'
+import { entityRoute } from './entityRoutes'
 
 // ---------- side drawer ----------
 
@@ -133,6 +135,7 @@ const KIND_LABEL: Record<string, string> = {
 
 export function LinkPanel({ entityType, entityId }: { entityType: string; entityId: number }) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const { data: links = [] } = useQuery({
     queryKey: ['links', entityType, entityId],
     queryFn: () => api.get<LinkItem[]>(`/links/for/${entityType}/${entityId}`),
@@ -245,16 +248,27 @@ export function LinkPanel({ entityType, entityId }: { entityType: string; entity
         <ul className="space-y-1.5">
           {links.map((link) => {
             const outgoing = link.from_type === entityType && link.from_id === entityId
+            const otherType = outgoing ? link.to_type : link.from_type
+            const otherId = outgoing ? link.to_id : link.from_id
+            const otherTitle = outgoing ? link.to_title : link.from_title
+            const route = entityRoute(otherType, otherId)
             return (
               <li key={link.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-slate-800/60">
                 <span className="min-w-0">
                   <Badge tone={link.kind === 'blocks' ? 'red' : link.kind === 'precedes' ? 'amber' : 'slate'} className="mr-1.5">
                     {outgoing ? KIND_LABEL[link.kind] : `is ${link.kind === 'blocks' ? 'blocked by' : link.kind === 'precedes' ? 'preceded by' : KIND_LABEL[link.kind]}`}
                   </Badge>
-                  <span className={cn('font-medium', !outgoing && 'text-slate-600 dark:text-slate-300')}>
-                    {outgoing ? link.to_title : link.from_title}
-                  </span>
-                  <span className="ml-1 text-slate-400">({outgoing ? link.to_type : link.from_type})</span>
+                  {route ? (
+                    <button
+                      onClick={() => navigate(route)}
+                      className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                    >
+                      {otherTitle}
+                    </button>
+                  ) : (
+                    <span className={cn('font-medium', !outgoing && 'text-slate-600 dark:text-slate-300')}>{otherTitle}</span>
+                  )}
+                  <span className="ml-1 text-slate-400">({otherType})</span>
                 </span>
                 <button onClick={() => remove.mutate(link.id)} className="shrink-0 text-slate-400 hover:text-rose-500">
                   <Trash2 size={13} />
