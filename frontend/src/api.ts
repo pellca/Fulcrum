@@ -420,6 +420,71 @@ export function mailStats() {
   return api.get<MailStats>('/mail/stats')
 }
 
+// ---------- mail triage action rail ----------
+
+export type MailSuggestionType = 'action' | 'commitment'
+
+export interface MailSuggestion {
+  type: MailSuggestionType
+  id: number
+  title: string
+  status: string
+  due_date: string | null
+  owner: PersonMini | null
+  score: number
+  reasons: string[]
+}
+
+export function mailSuggestions(messageId: number) {
+  return api.get<{ suggestions: MailSuggestion[] }>(`/mail/${messageId}/suggestions`)
+}
+
+export interface MailLogChaseResult {
+  chase_id: number
+  target_type: MailSuggestionType
+  target_id: number
+}
+
+export function mailLogChase(
+  messageId: number,
+  body: { target_type: MailSuggestionType; target_id: number; note?: string | null; next_chase_on?: string | null },
+) {
+  return api.post<MailLogChaseResult>(`/mail/${messageId}/log-chase`, body)
+}
+
+export interface MailCreateActionResult {
+  action_id: number
+  title: string
+  owner_name: string | null
+  due_date: string | null
+  warnings: string[]
+}
+
+export function mailCreateAction(messageId: number, text: string) {
+  return api.post<MailCreateActionResult>(`/mail/${messageId}/create-action`, { text })
+}
+
+export interface MailCloseActionResult {
+  action_id: number
+  status: string
+}
+
+export function mailCloseAction(messageId: number, actionId: number) {
+  return api.post<MailCloseActionResult>(`/mail/${messageId}/close-action`, { action_id: actionId })
+}
+
+export function mailPersonNote(messageId: number, body: { person_id: number; kind?: PersonNoteKind; note: string }) {
+  return api.post<PersonNote>(`/mail/${messageId}/person-note`, body)
+}
+
+export function mailDismiss(messageId: number) {
+  return api.post<{ triage: MailTriage }>(`/mail/${messageId}/dismiss`)
+}
+
+export function mailReopen(messageId: number) {
+  return api.post<{ triage: MailTriage }>(`/mail/${messageId}/reopen`)
+}
+
 export interface TimelineData {
   from: string
   to: string

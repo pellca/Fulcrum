@@ -134,7 +134,7 @@ Everything below attaches through the existing seams (REST API, module registry,
 | **SARA ingest module** | Module that reads SARA audit/issue exports; audits become workstreams, issue due dates become key dates, overdue issues feed risk chains. | ★★★ | M–L¹ | free |
 | **Diary auto-sync watcher** | Watches a folder (e.g. OneDrive-synced) for a fresh `diary.json` and imports it automatically — zero-touch diary. | ★★ | S | free |
 | **Outlook draft handoff** | Chases and agendas open as pre-filled Outlook drafts (`.eml`/mailto — no Graph API needed). | ★★ | S | free |
-| **Mailbox triage pane** | `export_mail.py` (COM, sibling of the diary extractor) feeds Inbox + Sent Items into a triage pane: log chases, spawn/close actions, push People Notes — one click per email. | ★★★ | L | free |
+| **Mailbox triage pane** ✅ *shipped* | `export_mail.py` (COM, sibling of the diary extractor) feeds Inbox + Sent Items into a triage pane: suggestions rank matching actions per email; log chases, spawn/close actions, push People Notes, dismiss — one keystroke per email. | ★★★ | L | free |
 | **SharePoint push + Power Automate chaser** | Diff-export actions into a OneDrive-synced library folder; flows upsert a SharePoint List and send throttled per-owner chase emails. No Graph anywhere. | ★★★ | M | free |
 | **Teams deep links** | Meetings carry a "Join"/chat link; topics link to their Teams channel. | ★ | S | free |
 

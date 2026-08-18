@@ -4,7 +4,18 @@ from datetime import date
 
 from sqlalchemy.orm import Session
 
-from ..models import Action, Commitment, Decision, KeyDate, Link, MailMessage, Meeting, Topic, Workstream
+from ..models import (
+    Action,
+    Commitment,
+    Decision,
+    KeyDate,
+    Link,
+    MailMessage,
+    Meeting,
+    PersonNote,
+    Topic,
+    Workstream,
+)
 
 DEPENDENCY_KINDS = ("blocks", "precedes")
 
@@ -17,6 +28,7 @@ TITLE_RESOLVERS = {
     "decision": (Decision, lambda r: r.title),
     "meeting": (Meeting, lambda r: f"{r.forum.name} — {r.scheduled_at:%d %b %Y}"),
     "mail": (MailMessage, lambda r: r.subject or f"mail #{r.id}"),
+    "person_note": (PersonNote, lambda r: r.note[:60]),
 }
 
 

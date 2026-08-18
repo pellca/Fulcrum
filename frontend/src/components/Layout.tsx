@@ -20,12 +20,12 @@ import { GlobalSearch } from './GlobalSearch'
 
 const nav = [
   { to: '/', label: 'Today', icon: Gauge },
+  { to: '/mailbox', label: 'Mailbox', icon: Mail },
   { to: '/register', label: 'Register', icon: ClipboardList },
   { to: '/topics', label: 'Topics', icon: Lightbulb },
   { to: '/meetings', label: 'Meetings', icon: Landmark },
   { to: '/planner', label: 'Planner', icon: TrendingUpDown },
   { to: '/diary', label: 'Diary', icon: CalendarDays },
-  { to: '/mailbox', label: 'Mailbox', icon: Mail },
   { to: '/people', label: 'People', icon: Users },
   { to: '/modules', label: 'Modules', icon: Puzzle },
   { to: '/settings', label: 'Settings', icon: Settings },

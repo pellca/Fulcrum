@@ -507,3 +507,75 @@ class QuickAddIn(BaseModel):
 class ClearIn(BaseModel):
     scope: Literal["all", "demo", "diary", "mail", "module_runs"]
     confirm: str = Field(description='Must be the literal string "CLEAR"')
+
+
+# ---------- mail triage ----------
+
+TriageTargetType = Literal["action", "commitment"]
+
+
+class SuggestionOut(BaseModel):
+    type: TriageTargetType
+    id: int
+    title: str
+    status: str
+    due_date: Optional[date] = None
+    owner: Optional[PersonMini] = None
+    score: float
+    reasons: list[str]
+
+
+class SuggestionsOut(BaseModel):
+    suggestions: list[SuggestionOut]
+
+
+class LogChaseIn(BaseModel):
+    target_type: TriageTargetType
+    target_id: int
+    note: Optional[str] = None
+    next_chase_on: Optional[date] = None
+
+
+class LogChaseOut(BaseModel):
+    chase_id: int
+    target_type: TriageTargetType
+    target_id: int
+
+
+class CreateActionFromMailIn(BaseModel):
+    text: str
+
+
+class CreateActionFromMailOut(BaseModel):
+    action_id: int
+    title: str
+    owner_name: Optional[str] = None
+    due_date: Optional[date] = None
+    warnings: list[str]
+
+
+class CloseActionFromMailIn(BaseModel):
+    action_id: int
+
+
+class CloseActionFromMailOut(BaseModel):
+    action_id: int
+    status: str
+
+
+class PersonNoteFromMailIn(BaseModel):
+    person_id: int
+    kind: PersonNoteKind = "general"
+    note: str
+
+
+class TriageOut(BaseModel):
+    triage: str
+
+
+class DismissBulkIn(BaseModel):
+    ids: list[int]
+
+
+class DismissBulkOut(BaseModel):
+    dismissed: int
