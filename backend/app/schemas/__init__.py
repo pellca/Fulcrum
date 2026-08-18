@@ -52,6 +52,40 @@ class PersonOut(ORMModel):
     aliases: list[AliasOut] = []
 
 
+PersonNoteKind = Literal["feedback", "call", "observation", "general"]
+PersonNoteSource = Literal["manual", "mail", "meeting"]
+
+
+class PersonNoteIn(BaseModel):
+    kind: PersonNoteKind = "general"
+    note: str
+    noted_on: Optional[date] = None
+    source: PersonNoteSource = "manual"
+
+
+class PersonNotePatch(BaseModel):
+    kind: Optional[PersonNoteKind] = None
+    note: Optional[str] = None
+    noted_on: Optional[date] = None
+    discussed_on: Optional[date] = None
+    source: Optional[PersonNoteSource] = None
+
+
+class MarkNotesDiscussedIn(BaseModel):
+    # None = all undiscussed notes; a list = just those ids (empty list marks nothing)
+    ids: Optional[list[int]] = None
+
+
+class PersonNoteOut(ORMModel):
+    id: int
+    person_id: int
+    kind: str
+    note: str
+    noted_on: date
+    discussed_on: Optional[date]
+    source: str
+
+
 class WorkstreamMini(ORMModel):
     id: int
     name: str
@@ -467,7 +501,7 @@ class ModuleRunOut(ORMModel):
 
 class QuickAddIn(BaseModel):
     text: str
-    type: Literal["action", "commitment", "topic"] = "action"
+    type: Literal["action", "commitment", "topic", "note"] = "action"
 
 
 class ClearIn(BaseModel):

@@ -4,8 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Action, Commitment, Decision, Person, PersonAlias, Topic
-from ..schemas import PersonIn, PersonOut, PersonPatch
+from ..models import Action, Commitment, Decision, Person, PersonAlias, PersonNote, Topic
+from ..schemas import (
+    MarkNotesDiscussedIn,
+    PersonIn,
+    PersonNoteIn,
+    PersonNoteOut,
+    PersonNotePatch,
+    PersonOut,
+    PersonPatch,
+)
 from ..services.bulk import check_references, delete_entities
 from ..services.chase import latest_chase_map
 
@@ -119,6 +127,12 @@ def one_to_one_pack(person_id: int, db: Session = Depends(get_db)):
         .order_by(Topic.target_by.is_(None), Topic.target_by)
         .all()
     )
+    undiscussed_notes = (
+        db.query(PersonNote)
+        .filter(PersonNote.person_id == person_id, PersonNote.discussed_on.is_(None))
+        .order_by(PersonNote.noted_on.desc(), PersonNote.id.desc())
+        .all()
+    )
 
     return {
         "person": {
@@ -154,6 +168,16 @@ def one_to_one_pack(person_id: int, db: Session = Depends(get_db)):
             }
             for t in topics
         ],
+        "notes": [
+            {
+                "id": n.id,
+                "kind": n.kind,
+                "note": n.note,
+                "noted_on": n.noted_on.isoformat() if n.noted_on else None,
+                "source": n.source,
+            }
+            for n in undiscussed_notes
+        ],
     }
 
 
@@ -179,4 +203,73 @@ def delete_alias(alias_id: int, db: Session = Depends(get_db)):
     alias = db.get(PersonAlias, alias_id)
     if alias:
         db.delete(alias)
+        db.commit()
+
+
+@router.get("/{person_id}/notes", response_model=list[PersonNoteOut])
+def list_person_notes(
+    person_id: int,
+    kind: str | None = None,
+    undiscussed: bool | None = None,
+    db: Session = Depends(get_db),
+):
+    if not db.get(Person, person_id):
+        raise HTTPException(404)
+    query = db.query(PersonNote).filter(PersonNote.person_id == person_id)
+    if kind is not None:
+        query = query.filter(PersonNote.kind == kind)
+    if undiscussed:
+        query = query.filter(PersonNote.discussed_on.is_(None))
+    return query.order_by(PersonNote.noted_on.desc(), PersonNote.id.desc()).all()
+
+
+@router.post("/{person_id}/notes", response_model=PersonNoteOut, status_code=201)
+def add_person_note(person_id: int, body: PersonNoteIn, db: Session = Depends(get_db)):
+    if not db.get(Person, person_id):
+        raise HTTPException(404)
+    data = body.model_dump()
+    if data["noted_on"] is None:
+        data["noted_on"] = date.today()
+    note = PersonNote(person_id=person_id, **data)
+    db.add(note)
+    db.commit()
+    return note
+
+
+@router.post("/{person_id}/notes/mark-discussed")
+def mark_notes_discussed(
+    person_id: int, body: MarkNotesDiscussedIn | None = None, db: Session = Depends(get_db)
+):
+    if not db.get(Person, person_id):
+        raise HTTPException(404)
+    ids = body.ids if body else None
+    query = db.query(PersonNote).filter(
+        PersonNote.person_id == person_id, PersonNote.discussed_on.is_(None)
+    )
+    if ids is not None:
+        query = query.filter(PersonNote.id.in_(ids))
+    notes = query.all()
+    today = date.today()
+    for note in notes:
+        note.discussed_on = today
+    db.commit()
+    return {"marked": len(notes)}
+
+
+@router.patch("/notes/{note_id}", response_model=PersonNoteOut)
+def update_person_note(note_id: int, body: PersonNotePatch, db: Session = Depends(get_db)):
+    note = db.get(PersonNote, note_id)
+    if not note:
+        raise HTTPException(404)
+    for key, value in body.model_dump(exclude_unset=True).items():
+        setattr(note, key, value)
+    db.commit()
+    return note
+
+
+@router.delete("/notes/{note_id}", status_code=204)
+def delete_person_note(note_id: int, db: Session = Depends(get_db)):
+    note = db.get(PersonNote, note_id)
+    if note:
+        db.delete(note)
         db.commit()

@@ -134,7 +134,8 @@ Everything below attaches through the existing seams (REST API, module registry,
 | **SARA ingest module** | Module that reads SARA audit/issue exports; audits become workstreams, issue due dates become key dates, overdue issues feed risk chains. | ★★★ | M–L¹ | free |
 | **Diary auto-sync watcher** | Watches a folder (e.g. OneDrive-synced) for a fresh `diary.json` and imports it automatically — zero-touch diary. | ★★ | S | free |
 | **Outlook draft handoff** | Chases and agendas open as pre-filled Outlook drafts (`.eml`/mailto — no Graph API needed). | ★★ | S | free |
-| **Planner/SharePoint round-trip** | Export register changes back to Planner/SharePoint list format so teams still living there stay in sync. | ★ | M | free |
+| **Mailbox triage pane** | `export_mail.py` (COM, sibling of the diary extractor) feeds Inbox + Sent Items into a triage pane: log chases, spawn/close actions, push People Notes — one click per email. | ★★★ | L | free |
+| **SharePoint push + Power Automate chaser** | Diff-export actions into a OneDrive-synced library folder; flows upsert a SharePoint List and send throttled per-owner chase emails. No Graph anywhere. | ★★★ | M | free |
 | **Teams deep links** | Meetings carry a "Join"/chat link; topics link to their Teams channel. | ★ | S | free |
 
 ¹ depends on what SARA can export (CSV/Excel assumed; an API would be L).
@@ -165,6 +166,7 @@ Everything below attaches through the existing seams (REST API, module registry,
 | **1:1 packs** ✅ *shipped* | One click per person: everything they own, overdue, promised, and decisions awaiting them — walk into any 1:1 armed. | ★★★ | S | free |
 | **Weekly principal report builder** | Curated weekly pack (delivered/slipped/decisions needed/horizon) as PDF; the daily-brief pipeline generalised. | ★★ | M | free |
 | **Decision review dates** ✅ *shipped* | Decisions carry a revisit date and resurface on the dashboard when due — "we said we'd look at this again in Q4" never gets lost. | ★★ | S | free |
+| **People Notes** ✅ *shipped* | Feedback, call notes and observations tagged to a person (`note @sarah … kind:feedback`); undiscussed notes surface in the 1:1 pack and sweep clear after the conversation. | ★★ | S | free |
 | **Data quality panel** | Unowned items, missing due dates, stale statuses, unlinked meetings — keeps the register trustworthy, which everything else depends on. | ★★ | S | free |
 
 ### 6 · Platform & quality of life

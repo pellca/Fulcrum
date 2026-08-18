@@ -27,6 +27,7 @@ DEMO_TABLES = [
     "commitment",
     "key_date",
     "workstream",
+    "person_note",
     "person",
 ]
 

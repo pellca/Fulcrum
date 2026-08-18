@@ -7,7 +7,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Action, Chase, Commitment, Link, Topic
+from ..models import Action, Chase, Commitment, Link, PersonNote, Topic
 from ..schemas import (
     ActionIn,
     ActionOut,
@@ -325,6 +325,24 @@ def quickadd(body: QuickAddIn, db: Session = Depends(get_db)):
     parsed = parse_quickadd(db, body.text)
     if not parsed["title"]:
         raise HTTPException(422, "No title after removing tokens")
+    if body.type == "note":
+        if parsed["owner_id"] is None:
+            raise HTTPException(422, "A note needs a matching @person")
+        item = PersonNote(
+            person_id=parsed["owner_id"],
+            note=parsed["title"],
+            kind=parsed["kind"] or "general",
+            noted_on=date.today(),
+            source="manual",
+        )
+        db.add(item)
+        db.commit()
+        return {
+            "type": body.type,
+            "id": item.id,
+            "title": item.note,
+            "warnings": parsed["warnings"],
+        }
     if body.type == "commitment":
         item = Commitment(
             title=parsed["title"],

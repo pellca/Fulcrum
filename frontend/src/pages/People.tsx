@@ -2,22 +2,44 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, Download, NotebookTabs, Plus, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Check, Download, NotebookTabs, Pencil, Plus, StickyNote, Trash2, X } from 'lucide-react'
 import { PeopleImportButton } from '../components/PeopleImport'
 import { BulkBar, SelectAllHeader, SelectCheckbox, useSelection, type Id } from '../components/BulkSelect'
-import { api, type Person, type Workstream } from '../api'
+import {
+  api,
+  createPersonNote,
+  deletePersonNote,
+  listPersonNotes,
+  updatePersonNote,
+  type Person,
+  type PersonNote,
+  type PersonNoteKind,
+  type PersonNotePatch,
+  type Workstream,
+} from '../api'
 import {
   Badge,
   Button,
   cn,
   EmptyState,
   Field,
+  fmtDate,
   Input,
   Modal,
   PageHeader,
   Select,
   Spinner,
+  Textarea,
 } from '../components/ui'
+import { Drawer, Section } from '../components/panels'
+
+const NOTE_KINDS: PersonNoteKind[] = ['feedback', 'call', 'observation', 'general']
+const noteKindTone: Record<PersonNoteKind, string> = {
+  feedback: 'violet',
+  call: 'blue',
+  observation: 'amber',
+  general: 'slate',
+}
 
 type Tab = 'people' | 'workstreams'
 
@@ -86,6 +108,7 @@ function PeopleTable() {
   })
   const [editing, setEditing] = useState<Person | null>(null)
   const [deleting, setDeleting] = useState<Person | null>(null)
+  const [notesFor, setNotesFor] = useState<Person | null>(null)
 
   if (isLoading) return <Spinner />
   if (!people?.length)
@@ -153,6 +176,9 @@ function PeopleTable() {
                       <NotebookTabs size={13} /> 1:1 pack
                     </Button>
                   </Link>
+                  <Button size="sm" variant="ghost" onClick={() => setNotesFor(person)} title="Feedback, calls, observations">
+                    <StickyNote size={13} /> Notes
+                  </Button>
                   <Button size="sm" variant="ghost" onClick={() => setEditing(person)}>
                     Edit
                   </Button>
@@ -180,6 +206,7 @@ function PeopleTable() {
       </div>
       {editing && <PersonModal person={editing} onClose={() => setEditing(null)} />}
       {deleting && <DeletePersonModal person={deleting} onClose={() => setDeleting(null)} />}
+      {notesFor && <PersonNotesDrawer person={notesFor} onClose={() => setNotesFor(null)} />}
       <BulkBar type="person" ids={[...selection.selected]} onClear={selection.clear} />
     </>
   )
@@ -251,6 +278,194 @@ function DeletePersonModal({ person, onClose }: { person: Person; onClose: () =>
         </div>
       )}
     </Modal>
+  )
+}
+
+function PersonNotesDrawer({ person, onClose }: { person: Person; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const [kindFilter, setKindFilter] = useState<PersonNoteKind | ''>('')
+  const [newKind, setNewKind] = useState<PersonNoteKind>('general')
+  const [newNote, setNewNote] = useState('')
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editKind, setEditKind] = useState<PersonNoteKind>('general')
+  const [editText, setEditText] = useState('')
+
+  const { data: notes = [], isLoading } = useQuery({
+    queryKey: ['person-notes', person.id, kindFilter],
+    queryFn: () => listPersonNotes(person.id, kindFilter ? { kind: kindFilter } : undefined),
+  })
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['person-notes', person.id] })
+
+  const add = useMutation({
+    mutationFn: () => createPersonNote(person.id, { kind: newKind, note: newNote.trim() }),
+    onSuccess: () => {
+      setNewNote('')
+      invalidate()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const update = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: PersonNotePatch }) => updatePersonNote(id, body),
+    onSuccess: () => {
+      setEditingId(null)
+      invalidate()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const remove = useMutation({
+    mutationFn: (id: number) => deletePersonNote(id),
+    onSuccess: invalidate,
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const submitNew = () => {
+    if (!newNote.trim() || add.isPending) return
+    add.mutate()
+  }
+
+  const startEdit = (note: PersonNote) => {
+    setEditingId(note.id)
+    setEditKind(note.kind)
+    setEditText(note.note)
+  }
+
+  const saveEdit = (id: number) => {
+    if (!editText.trim()) return
+    update.mutate({ id, body: { kind: editKind, note: editText.trim() } })
+  }
+
+  const toggleDiscussed = (note: PersonNote) =>
+    update.mutate({ id: note.id, body: { discussed_on: note.discussed_on ? null : new Date().toISOString().slice(0, 10) } })
+
+  return (
+    <Drawer open onClose={onClose} title={`Notes — ${person.name}`}>
+      <Section title="Log a note">
+        <div className="space-y-2">
+          <Select value={newKind} onChange={(e) => setNewKind(e.target.value as PersonNoteKind)} className="!w-36">
+            {NOTE_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </Select>
+          <Textarea
+            rows={2}
+            placeholder="What happened? (Ctrl+Enter to add)"
+            value={newNote}
+            onChange={(e) => setNewNote(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault()
+                submitNew()
+              }
+            }}
+          />
+          <div className="flex justify-end">
+            <Button size="sm" disabled={!newNote.trim() || add.isPending} onClick={submitNew}>
+              <Plus size={13} /> Add note
+            </Button>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Timeline">
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          <button
+            onClick={() => setKindFilter('')}
+            className={cn(
+              'rounded-full px-2.5 py-1 text-[11px] font-medium capitalize transition-colors',
+              kindFilter === ''
+                ? 'bg-indigo-600 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700',
+            )}
+          >
+            All
+          </button>
+          {NOTE_KINDS.map((k) => (
+            <button
+              key={k}
+              onClick={() => setKindFilter(k)}
+              className={cn(
+                'rounded-full px-2.5 py-1 text-[11px] font-medium capitalize transition-colors',
+                kindFilter === k
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700',
+              )}
+            >
+              {k}
+            </button>
+          ))}
+        </div>
+
+        {isLoading ? (
+          <Spinner />
+        ) : notes.length === 0 ? (
+          <p className="text-xs text-slate-400">
+            No notes yet. Log feedback, calls and observations here to build a picture over time.
+          </p>
+        ) : (
+          <ul className="space-y-1.5">
+            {notes.map((note) => (
+              <li key={note.id} className="rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-slate-800/60">
+                {editingId === note.id ? (
+                  <div className="space-y-2">
+                    <Select value={editKind} onChange={(e) => setEditKind(e.target.value as PersonNoteKind)} className="!w-36">
+                      {NOTE_KINDS.map((k) => (
+                        <option key={k} value={k}>
+                          {k}
+                        </option>
+                      ))}
+                    </Select>
+                    <Textarea rows={2} value={editText} onChange={(e) => setEditText(e.target.value)} />
+                    <div className="flex justify-end gap-1.5">
+                      <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                        Cancel
+                      </Button>
+                      <Button size="sm" disabled={!editText.trim() || update.isPending} onClick={() => saveEdit(note.id)}>
+                        Save
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="min-w-0">
+                        <Badge tone={noteKindTone[note.kind]} className="mr-1.5 capitalize">
+                          {note.kind}
+                        </Badge>
+                        <span className="font-medium">{fmtDate(note.noted_on)}</span>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <button
+                          onClick={() => toggleDiscussed(note)}
+                          className={cn(
+                            'flex items-center gap-0.5 text-[10px] font-medium',
+                            note.discussed_on ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300',
+                          )}
+                          title={note.discussed_on ? `Discussed ${fmtDate(note.discussed_on)} — click to unmark` : 'Mark as discussed'}
+                        >
+                          <Check size={11} /> {note.discussed_on ? 'discussed' : 'undiscussed'}
+                        </button>
+                        <button onClick={() => startEdit(note)} className="text-slate-400 hover:text-indigo-500">
+                          <Pencil size={13} />
+                        </button>
+                        <button onClick={() => remove.mutate(note.id)} className="text-slate-400 hover:text-rose-500">
+                          <Trash2 size={13} />
+                        </button>
+                      </span>
+                    </div>
+                    <p className="mt-1.5 whitespace-pre-wrap text-slate-700 dark:text-slate-200">{note.note}</p>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+    </Drawer>
   )
 }
 

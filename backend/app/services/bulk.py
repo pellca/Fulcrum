@@ -19,6 +19,7 @@ from ..models import (
     Link,
     Meeting,
     Person,
+    PersonNote,
     Topic,
     Workstream,
 )
@@ -80,6 +81,7 @@ def _person_references(db: Session, person_ids: list[int]) -> list[dict]:
         ("forums chaired", db.query(Forum).filter(Forum.chair_id.in_(person_ids))),
         ("decisions owned", db.query(Decision).filter(Decision.owner_id.in_(person_ids))),
         ("workstreams owned", db.query(Workstream).filter(Workstream.owner_id.in_(person_ids))),
+        ("notes recorded", db.query(PersonNote).filter(PersonNote.person_id.in_(person_ids))),
     ]
     findings = []
     for label, query in checks:
@@ -90,7 +92,10 @@ def _person_references(db: Session, person_ids: list[int]) -> list[dict]:
                 {
                     "label": label,
                     "count": count,
-                    "examples": [getattr(r, "title", None) or getattr(r, "name", "") for r in rows],
+                    "examples": [
+                        (getattr(r, "title", None) or getattr(r, "name", None) or getattr(r, "note", ""))[:80]
+                        for r in rows
+                    ],
                 }
             )
     return findings

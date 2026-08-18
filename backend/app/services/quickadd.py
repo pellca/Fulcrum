@@ -6,6 +6,7 @@ Grammar (tokens may appear anywhere; the rest is the title):
     due:VALUE     2026-08-15 | today | tomorrow | +N (days) | mon..sun (next such day)
     !PRIORITY     !high | !med | !medium | !low
     origin:VALUE  principal | aet | external | self   (commitments only)
+    kind:VALUE    feedback | call | observation | general   (notes only)
 """
 
 import re
@@ -18,13 +19,14 @@ from sqlalchemy.orm import Session
 from ..models import Person, PersonAlias, Workstream
 
 TOKEN_RE = re.compile(
-    r"""(@"[^"]+"|@\S+|\#\S+|due:\S+|origin:\S+|!\S+)""",
+    r"""(@"[^"]+"|@\S+|\#\S+|due:\S+|origin:\S+|kind:\S+|!\S+)""",
     re.VERBOSE,
 )
 
 WEEKDAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 PRIORITIES = {"high": "high", "med": "medium", "medium": "medium", "low": "low"}
 ORIGINS = {"principal", "aet", "external", "self"}
+NOTE_KINDS = {"feedback", "call", "observation", "general"}
 
 
 def parse_due(value: str, today: Optional[date] = None) -> Optional[date]:
@@ -87,6 +89,7 @@ def parse_quickadd(db: Session, text: str, today: Optional[date] = None) -> dict
         "due_date": None,
         "priority": "medium",
         "origin": None,
+        "kind": None,
         "warnings": [],
     }
     remainder = text
@@ -118,6 +121,12 @@ def parse_quickadd(db: Session, text: str, today: Optional[date] = None) -> dict
                 result["origin"] = value
             else:
                 result["warnings"].append(f"Unknown origin '{value}'")
+        elif token.startswith("kind:"):
+            value = token[5:].lower()
+            if value in NOTE_KINDS:
+                result["kind"] = value
+            else:
+                result["warnings"].append(f"Unknown note kind '{value}'")
         elif token.startswith("!"):
             priority = PRIORITIES.get(token[1:].lower())
             if priority:

@@ -1,6 +1,7 @@
+from datetime import date
 from typing import Optional
 
-from sqlalchemy import Boolean, ForeignKey, String, Text
+from sqlalchemy import Boolean, Date, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db import Base
@@ -22,6 +23,9 @@ class Person(Base, TimestampMixin, DemoMixin):
     aliases: Mapped[list["PersonAlias"]] = relationship(
         back_populates="person", cascade="all, delete-orphan"
     )
+    person_notes: Mapped[list["PersonNote"]] = relationship(
+        back_populates="person", cascade="all, delete-orphan"
+    )
 
 
 class PersonAlias(Base):
@@ -32,6 +36,22 @@ class PersonAlias(Base):
     person_id: Mapped[int] = mapped_column(ForeignKey("person.id", ondelete="CASCADE"))
 
     person: Mapped[Person] = relationship(back_populates="aliases")
+
+
+class PersonNote(Base, TimestampMixin, DemoMixin):
+    __tablename__ = "person_note"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("person.id", ondelete="CASCADE"))
+    # feedback | call | observation | general
+    kind: Mapped[str] = mapped_column(String(20), default="general")
+    note: Mapped[str] = mapped_column(Text)
+    noted_on: Mapped[date] = mapped_column(Date)
+    discussed_on: Mapped[Optional[date]] = mapped_column(Date)
+    # manual | mail | meeting
+    source: Mapped[str] = mapped_column(String(20), default="manual")
+
+    person: Mapped[Person] = relationship(back_populates="person_notes")
 
 
 class Workstream(Base, TimestampMixin, DemoMixin):

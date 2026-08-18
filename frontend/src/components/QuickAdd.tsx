@@ -5,9 +5,16 @@ import { Zap } from 'lucide-react'
 import { api } from '../api'
 import { Select } from './ui'
 
+const placeholders: Record<'action' | 'commitment' | 'topic' | 'note', string> = {
+  action: 'Quick add…  e.g. Chase scope pack @sarah #credit due:fri !high   (Ctrl+K)',
+  commitment: 'Quick add…  e.g. Chase scope pack @sarah #credit due:fri !high origin:principal   (Ctrl+K)',
+  topic: 'Quick add…  e.g. Chase scope pack @sarah #credit due:fri   (Ctrl+K)',
+  note: 'Quick add…  e.g. Handled the escalation well @sarah kind:feedback   (Ctrl+K)',
+}
+
 export function QuickAdd() {
   const [text, setText] = useState('')
-  const [type, setType] = useState<'action' | 'commitment' | 'topic'>('action')
+  const [type, setType] = useState<'action' | 'commitment' | 'topic' | 'note'>('action')
   const inputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
 
@@ -48,7 +55,8 @@ export function QuickAdd() {
           ref={inputRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Quick add…  e.g. Chase scope pack @sarah #credit due:fri !high   (Ctrl+K)"
+          placeholder={placeholders[type]}
+          title={type === 'note' ? 'Needs an @person. Optional kind:feedback|call|observation|general (defaults to general).' : undefined}
           className="w-full rounded-lg border border-slate-300 bg-slate-50 py-1.5 pr-3 pl-8 text-[13px] placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:focus:bg-slate-900"
         />
       </div>
@@ -60,6 +68,7 @@ export function QuickAdd() {
         <option value="action">Action</option>
         <option value="commitment">Commitment</option>
         <option value="topic">Topic</option>
+        <option value="note">Note</option>
       </Select>
     </form>
   )

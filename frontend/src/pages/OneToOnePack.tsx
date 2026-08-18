@@ -1,8 +1,15 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, FileDown } from 'lucide-react'
-import { api } from '../api'
+import { api, markNotesDiscussed, type PersonNoteKind } from '../api'
 import { Badge, Button, Card, EmptyState, fmtDate, priorityTone, Spinner, StatusBadge } from '../components/ui'
+
+const noteKindTone: Record<PersonNoteKind, string> = {
+  feedback: 'violet',
+  call: 'blue',
+  observation: 'amber',
+  general: 'slate',
+}
 
 interface PackItem {
   id: number
@@ -26,6 +33,7 @@ interface Pack {
   waiting_on: PackItem[]
   decisions: { id: number; title: string; status: string; decided_on: string | null; review_on: string | null }[]
   topics: { id: number; title: string; intent: string; readiness: string; status: string; target_by: string | null; duration_minutes: number }[]
+  notes: { id: number; kind: PersonNoteKind; note: string; noted_on: string; source: string }[]
 }
 
 function ItemRows({ items, showChase }: { items: PackItem[]; showChase?: boolean }) {
@@ -59,9 +67,15 @@ function ItemRows({ items, showChase }: { items: PackItem[]; showChase?: boolean
 
 export default function OneToOnePack() {
   const { id } = useParams()
+  const queryClient = useQueryClient()
   const { data: pack, isLoading } = useQuery({
     queryKey: ['pack', id],
     queryFn: () => api.get<Pack>(`/people/${id}/pack`),
+  })
+
+  const markDiscussed = useMutation({
+    mutationFn: () => markNotesDiscussed(Number(id)),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pack', id] }),
   })
 
   if (isLoading || !pack) return <Spinner />
@@ -74,7 +88,12 @@ export default function OneToOnePack() {
   }
 
   const empty =
-    !pack.overdue.length && !pack.due_soon.length && !pack.later.length && !pack.decisions.length && !pack.topics.length
+    !pack.overdue.length &&
+    !pack.due_soon.length &&
+    !pack.later.length &&
+    !pack.decisions.length &&
+    !pack.topics.length &&
+    !pack.notes.length
 
   return (
     <div className="dashboard-print mx-auto max-w-3xl">
@@ -95,7 +114,9 @@ export default function OneToOnePack() {
         </p>
       </div>
 
-      {empty && <EmptyState title="Nothing open for this person" hint="No open actions, commitments, decisions or topics." />}
+      {empty && (
+        <EmptyState title="Nothing open for this person" hint="No open actions, commitments, decisions, topics or undiscussed notes." />
+      )}
 
       <div className="space-y-4">
         {pack.waiting_on.length > 0 && (
@@ -149,6 +170,36 @@ export default function OneToOnePack() {
                     <Badge tone={topic.readiness === 'ready' ? 'green' : 'slate'}>{topic.readiness}</Badge>
                     {topic.target_by && <Badge tone="amber">by {fmtDate(topic.target_by)}</Badge>}
                   </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+        {pack.notes.length > 0 && (
+          <Card
+            title={`Notes since last 1:1 (${pack.notes.length})`}
+            actions={
+              <Button
+                variant="secondary"
+                size="sm"
+                className="no-print"
+                disabled={markDiscussed.isPending}
+                onClick={() => markDiscussed.mutate()}
+              >
+                Mark all discussed
+              </Button>
+            }
+          >
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {pack.notes.map((note) => (
+                <div key={note.id} className="py-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Badge tone={noteKindTone[note.kind]} className="capitalize">
+                      {note.kind}
+                    </Badge>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{fmtDate(note.noted_on)}</span>
+                  </div>
+                  <p className="mt-1 whitespace-pre-wrap text-[13px] text-slate-700 dark:text-slate-200">{note.note}</p>
                 </div>
               ))}
             </div>

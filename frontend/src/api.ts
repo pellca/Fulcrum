@@ -50,6 +50,44 @@ export interface Person extends PersonMini {
   aliases: { id: number; alias: string }[]
 }
 
+export type PersonNoteKind = 'feedback' | 'call' | 'observation' | 'general'
+
+export interface PersonNote {
+  id: number
+  person_id: number
+  kind: PersonNoteKind
+  note: string
+  noted_on: string
+  discussed_on: string | null
+  source: 'manual' | 'mail' | 'meeting'
+}
+
+export function listPersonNotes(personId: number, params?: { kind?: string; undiscussed?: boolean }) {
+  const search = new URLSearchParams()
+  if (params?.kind) search.set('kind', params.kind)
+  if (params?.undiscussed) search.set('undiscussed', 'true')
+  const qs = search.toString()
+  return api.get<PersonNote[]>(`/people/${personId}/notes${qs ? `?${qs}` : ''}`)
+}
+
+export function createPersonNote(personId: number, body: { kind: PersonNoteKind; note: string; noted_on?: string }) {
+  return api.post<PersonNote>(`/people/${personId}/notes`, body)
+}
+
+export type PersonNotePatch = Partial<Pick<PersonNote, 'kind' | 'note' | 'noted_on' | 'discussed_on'>>
+
+export function updatePersonNote(noteId: number, body: PersonNotePatch) {
+  return api.patch<PersonNote>(`/people/notes/${noteId}`, body)
+}
+
+export function deletePersonNote(noteId: number) {
+  return api.delete(`/people/notes/${noteId}`)
+}
+
+export function markNotesDiscussed(personId: number, ids?: number[]) {
+  return api.post<{ marked: number }>(`/people/${personId}/notes/mark-discussed`, ids ? { ids } : undefined)
+}
+
 export interface WorkstreamMini {
   id: number
   name: string
