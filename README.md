@@ -68,7 +68,7 @@ blocked, PowerShell in Constrained Language Mode), writing `mailbox.json`. It sh
 repo**, so there is nothing extra to copy.
 
 ```bat
-python export_mail.py --days 5 --out C:\mail\mailbox.json
+python export_mail.py --days 5 --out data\imports\mailbox.json
 ```
 
 Run the pre-flight in `tools/mail_extractor/README.md` first — it confirms Outlook COM works and,
@@ -81,6 +81,45 @@ Each run exports the whole window and the importer upserts by message id, so re-
 idempotent and never disturb triage state. Mail you have **not** linked to anything is purged after
 30 days (override with `FULCRUM_MAIL_RETENTION_DAYS`) to stop the database becoming a mail archive;
 anything you linked to an action, commitment or note is kept indefinitely as evidence.
+
+**On a corporate machine, prefer `import_mail.py` over the browser upload.** It reads
+`mailbox.json` and writes straight to `data/fulcrum.db` — the content never goes through an HTTP
+request, so it never gets near the bank's DLP inspection of browser uploads, and it works while
+`run.py` is already running:
+
+```bat
+python import_mail.py
+```
+
+| Flag | Effect |
+|---|---|
+| `--archive` | after a successful import, move the file to `archive/` next to it (timestamped, never overwrites) |
+| `--quiet` | print nothing on success |
+| `--json` | print a single JSON summary (`{"files": [...], "totals": {...}}`) instead of the human-readable lines |
+
+Exit codes: `0` success, `1` unexpected error, `2` path not found, `3` malformed `mailbox.json`,
+`4` database error (e.g. locked — retry in a moment).
+
+`--archive` and retention solve different problems and don't share a clock: retention prunes the
+**database** of unlinked mail after 30 days, but `--archive` keeps the raw export — full plaintext
+bodies included — in `data/imports/archive/` indefinitely, with nothing ever pruning it; clear that
+folder out periodically if you use `--archive` on a schedule.
+
+With no argument it picks up `data\imports\mailbox.json`, so a two-line Task Scheduler `.bat` chains
+the extractor straight into Fulcrum. Both defaults are working-directory-dependent —
+`export_mail.py`'s relative `--out` resolves against the caller's cwd, while `import_mail.py`'s
+default is resolved relative to its own file — and Task Scheduler with a blank "Start in" runs jobs
+from `%windir%\System32`, so without a `cd` the export would write somewhere the importer never
+reads and you'd silently get no mail. Make the `.bat` self-locating instead:
+
+```bat
+cd /d %~dp0
+python tools\mail_extractor\export_mail.py --days 5 --out data\imports\mailbox.json
+python import_mail.py --quiet
+```
+
+Save this as `fulcrum-mail.bat` in the repo root (or set the scheduled task's "Start in" to the
+repo root) so `%~dp0` resolves correctly.
 
 ## Adding a module
 

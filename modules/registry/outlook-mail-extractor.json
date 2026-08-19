@@ -7,7 +7,7 @@
   "cwd": "C:/Dev/CoS/tools/mail_extractor",
   "args": [
     { "name": "days", "label": "Days of mail", "required": true, "default": "5" },
-    { "name": "out_file", "label": "Output mailbox.json path", "required": true, "default": "C:/mail/mailbox.json" }
+    { "name": "out_file", "label": "Output mailbox.json path", "required": true, "default": "C:/Dev/CoS/data/imports/mailbox.json" }
   ],
   "artifact": "{out_file}",
   "ingest": "mail"
