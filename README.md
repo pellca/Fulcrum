@@ -294,3 +294,17 @@ High value ÷ low effort first, and each step feeds the next:
 Shipped so far: the whole **Outlook bridge** (mail extractor → ingest → triage pane → verbs →
 click-through evidence), **People Notes**, **register export**, plus the earlier 1:1 packs, decision
 review dates, capacity heatmap, recurring topics and global search.
+
+### Known gaps — deliberately deferred
+
+Found by review, judged not worth blocking a release, and recorded here so they are not rediscovered
+as surprises. None of them affects the documented day-to-day flows.
+
+| Gap | Why it matters | Effort |
+|---|---|---|
+| **`people --dry-run` can disagree with a real commit** | `import_data.py`'s `_simulate_people_commit` re-implements `commit_people`'s counting instead of calling it, so across a *multi-file* run it can't see people an earlier file would have created and over-counts. Single-file runs agree exactly. This is the one live exception to the two-doors rule in `CLAUDE.md`; the clean fix is a real commit followed by a rollback, which needs a `commit=False` parameter on the shared service. | M |
+| **A bad file aborts the rest of a directory import** | CLI directory mode stops at the first malformed file and the remaining files are neither imported nor mentioned — on a schedule it repeats the same abort forever. Should collect per-file errors and continue. | M |
+| **CLI's two headline properties are untested** | That the importer makes no network calls, and that a locked database exits 4, were both verified by hand; nothing stops a refactor silently breaking either. | M |
+| **Upload endpoints keep every uploaded file forever** | Including malformed ones, in `data/imports/` — they accumulate and then break directory-mode imports. Wants a cleanup or a temp-file approach. | S |
+| **`PATCH` with an explicit `null` on a non-nullable column returns 500** | Project-wide consequence of the `exclude_unset` + `setattr` idiom, not specific to any one endpoint; fixing it in one place only would break the consistency. | M |
+| **`dismiss-bulk` has no UI** | The endpoint and its tests exist; the Mailbox list has no multi-select. The `BulkSelect` pattern used on Register/Topics/People would drop straight in. | S |
