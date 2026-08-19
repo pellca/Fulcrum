@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import Action, Commitment, Decision, Person, PersonAlias, PersonNote, Topic
 from ..schemas import (
+    AliasIn,
     MarkNotesDiscussedIn,
     PersonIn,
     PersonNoteIn,
@@ -182,11 +183,11 @@ def one_to_one_pack(person_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{person_id}/aliases", response_model=PersonOut)
-def add_alias(person_id: int, body: dict, db: Session = Depends(get_db)):
+def add_alias(person_id: int, body: AliasIn, db: Session = Depends(get_db)):
     person = db.get(Person, person_id)
     if not person:
         raise HTTPException(404)
-    alias = (body.get("alias") or "").strip()
+    alias = (body.alias or "").strip()
     if not alias:
         raise HTTPException(422, "alias required")
     existing = db.query(PersonAlias).filter(PersonAlias.alias == alias).first()

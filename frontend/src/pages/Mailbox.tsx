@@ -247,9 +247,13 @@ export default function Mailbox() {
     onError: (e: Error) => toast.error(e.message),
   })
 
-  const importSuccess = (summary: { added: number; updated: number; purged: number }) => {
+  const importSuccess = (summary: { added: number; updated: number; purged: number; duplicates?: number }) => {
+    const notes = [
+      summary.duplicates ? `${summary.duplicates} duplicate id(s) collapsed.` : null,
+      summary.purged ? `${summary.purged} message(s) purged past retention.` : null,
+    ].filter(Boolean)
     toast.success(`Mail imported: ${summary.added} added, ${summary.updated} updated`, {
-      description: summary.purged ? `${summary.purged} message(s) purged past retention.` : undefined,
+      description: notes.length ? notes.join(' ') : undefined,
     })
     invalidateMail()
   }

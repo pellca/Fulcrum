@@ -13,6 +13,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..models import DiaryEvent, Meeting, Person, PersonAlias
+from .import_utils import dedupe_by_id
 
 
 def _prefix(event_id: str) -> str:
@@ -32,9 +33,23 @@ def import_diary_file(db: Session, path: str | Path) -> dict:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or "events" not in payload:
         raise ValueError("Not a diary.json file: missing 'events' key")
+    events_raw = payload["events"]
+    if not isinstance(events_raw, list):
+        raise ValueError("Not a diary.json file: 'events' must be a list")
+    for raw in events_raw:
+        if not isinstance(raw, dict):
+            raise ValueError(f"Malformed event entry: expected an object, got {type(raw).__name__}")
+        event_id = raw.get("id")
+        if event_id is not None and not isinstance(event_id, (str, int)):
+            # A list/dict-valued id would otherwise reach db.get(DiaryEvent, event_id)
+            # (a single-column primary key lookup) and blow up with an opaque
+            # sqlalchemy.exc.InvalidRequestError instead of a clean exit 3.
+            raise ValueError(f"Malformed event entry: 'id' must be a string, got {type(event_id).__name__}")
+
+    events, duplicates = dedupe_by_id(events_raw)
 
     counts = {"added": 0, "updated": 0, "unchanged": 0}
-    for raw in payload["events"]:
+    for raw in events:
         event_id = raw.get("id")
         if not event_id:
             continue
@@ -79,6 +94,7 @@ def import_diary_file(db: Session, path: str | Path) -> dict:
     meta = payload.get("meta", {})
     return {
         **counts,
+        "duplicates": duplicates,
         "moved_pairs": moved,
         "meetings_updated": meetings_followed,
         "unmatched_attendees": unmatched,

@@ -99,5 +99,12 @@ def commit_people(db: Session, items: list[dict]) -> dict:
             db.add(PersonAlias(alias=alias, person_id=person.id))
             known_aliases.add(lowered)
             aliases_added += 1
+        # With autoflush=False, a just-added PersonAlias row is invisible to
+        # _existing_person()'s PersonAlias query (and to any other db.query()) until
+        # flushed — a later row in this same file whose name matches an alias just
+        # registered for an earlier row would otherwise look "new" and create a
+        # duplicate Person. Flush per item so every subsequent _existing_person()
+        # lookup sees aliases (and the new person) registered so far.
+        db.flush()
     db.commit()
     return {"created": created, "skipped_existing": skipped_existing, "aliases_added": aliases_added}

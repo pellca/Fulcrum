@@ -40,6 +40,10 @@ class AliasOut(ORMModel):
     alias: str
 
 
+class AliasIn(BaseModel):
+    alias: str
+
+
 class PersonOut(ORMModel):
     id: int
     name: str

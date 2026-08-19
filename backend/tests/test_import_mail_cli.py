@@ -105,12 +105,12 @@ def test_reimport_is_idempotent_reports_updated(tmp_path):
     first = run_cli([mailbox, "--json"], db_path)
     assert first.returncode == 0, first.stderr
     first_summary = json.loads(first.stdout)
-    assert first_summary["totals"] == {"added": 1, "updated": 0, "purged": 0}
+    assert first_summary["totals"] == {"added": 1, "updated": 0, "purged": 0, "duplicates": 0}
 
     second = run_cli([mailbox, "--json"], db_path)
     assert second.returncode == 0, second.stderr
     second_summary = json.loads(second.stdout)
-    assert second_summary["totals"] == {"added": 0, "updated": 1, "purged": 0}
+    assert second_summary["totals"] == {"added": 0, "updated": 1, "purged": 0, "duplicates": 0}
 
     assert len(_rows(db_path)) == 1
 
@@ -149,7 +149,7 @@ def test_directory_argument_imports_multiple_files_sorted(tmp_path):
     summary = json.loads(result.stdout)
     imported_names = [Path(f["path"]).name for f in summary["files"]]
     assert imported_names == ["mailbox-a.json", "mailbox-b.json"]
-    assert summary["totals"] == {"added": 2, "updated": 0, "purged": 0}
+    assert summary["totals"] == {"added": 2, "updated": 0, "purged": 0, "duplicates": 0}
     assert {r["message_id"] for r in _rows(db_path)} == {"dir-m1", "dir-m2"}
 
 
@@ -197,8 +197,13 @@ def test_json_output_shape_and_totals(tmp_path):
     assert set(summary.keys()) == {"files", "totals"}
     assert len(summary["files"]) == 2
     for entry in summary["files"]:
-        assert set(entry.keys()) == {"path", "added", "updated", "purged"}
-    assert summary["totals"] == {"added": 3, "updated": 0, "purged": 0}
+        # "duplicates" was added to import_mailbox()'s return alongside the mail
+        # dedup fix (WP-6.2 sibling work); the CLI's per-file JSON entry passes the
+        # service's summary straight through, so it now carries that field too.
+        # F1 then added "duplicates" to the CLI's own totals_keys as well, so the
+        # per-run total now surfaces the collapsed-duplicate count too.
+        assert set(entry.keys()) == {"path", "added", "updated", "purged", "duplicates"}
+    assert summary["totals"] == {"added": 3, "updated": 0, "purged": 0, "duplicates": 0}
 
 
 def test_archive_moves_file_after_success(tmp_path):
@@ -248,7 +253,7 @@ def test_json_and_quiet_together_still_emits_json(tmp_path):
 
     assert result.returncode == 0, result.stderr
     summary = json.loads(result.stdout)
-    assert summary["totals"] == {"added": 1, "updated": 0, "purged": 0}
+    assert summary["totals"] == {"added": 1, "updated": 0, "purged": 0, "duplicates": 0}
     assert {r["message_id"] for r in _rows(db_path)} == {"jq-m1"}
 
 
@@ -267,7 +272,7 @@ def test_json_partial_summary_on_mid_batch_failure(tmp_path):
     summary = json.loads(result.stdout)
     assert len(summary["files"]) == 1
     assert Path(summary["files"][0]["path"]).name == "mailbox-a.json"
-    assert summary["totals"] == {"added": 1, "updated": 0, "purged": 0}
+    assert summary["totals"] == {"added": 1, "updated": 0, "purged": 0, "duplicates": 0}
     assert {r["message_id"] for r in _rows(db_path)} == {"partial-m1"}
 
 

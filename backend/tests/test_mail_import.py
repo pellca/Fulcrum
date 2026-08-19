@@ -71,7 +71,7 @@ def _row(db, message_id):
 def test_import_is_idempotent_upsert(db):
     msg = _msg("m1", received_at=f"{TODAY.isoformat()}T09:00:00Z", subject="First subject")
     summary = import_mailbox(db, _mailbox([msg]))
-    assert summary == {"added": 1, "updated": 0, "purged": 0}
+    assert summary == {"added": 1, "updated": 0, "duplicates": 0, "purged": 0}
     assert db.query(MailMessage).count() == 1
 
     summary2 = import_mailbox(db, _mailbox([msg]))
@@ -108,6 +108,69 @@ def test_triage_preserved_content_refreshed_on_reimport(db):
     assert row.body_text == "Updated body"
     assert row.triage == "linked"
     assert row.triaged_at == "2026-08-10T12:00:00"
+
+
+def test_duplicate_message_id_deduplicated_last_wins(db):
+    """A hand-made or third-party mailbox.json (unlike the extractor's own output,
+    which de-duplicates within a run) could carry the same id twice. With
+    autoflush=False, a naive add-vs-update loop would db.add() both occurrences
+    (the first isn't visible to the query until flushed) and the single flush at
+    the end would hit a UNIQUE constraint violation on message_id. The importer
+    must de-duplicate up front, last occurrence wins, and report the collapse."""
+    msg1 = _msg("dup1", subject="First subject", body="First body", received_at=f"{TODAY.isoformat()}T09:00:00Z")
+    msg2 = _msg("dup1", subject="Second subject", body="Second body", received_at=f"{TODAY.isoformat()}T09:05:00Z")
+
+    summary = import_mailbox(db, _mailbox([msg1, msg2]))
+
+    assert summary["added"] == 1
+    assert summary["duplicates"] == 1
+    assert db.query(MailMessage).count() == 1
+    row = _row(db, "dup1")
+    assert row.subject == "Second subject"
+    assert row.body_text == "Second body"
+
+
+def test_triple_duplicate_message_id_deduplicated(db):
+    msgs = [
+        _msg("dup1", subject="v1", received_at=f"{TODAY.isoformat()}T09:00:00Z"),
+        _msg("dup1", subject="v2", received_at=f"{TODAY.isoformat()}T09:00:00Z"),
+        _msg("dup1", subject="v3", received_at=f"{TODAY.isoformat()}T09:00:00Z"),
+    ]
+
+    summary = import_mailbox(db, _mailbox(msgs))
+
+    assert summary["added"] == 1
+    assert summary["duplicates"] == 2
+    assert db.query(MailMessage).count() == 1
+    assert _row(db, "dup1").subject == "v3"
+
+
+def test_duplicate_message_id_triage_and_purge_unaffected(db):
+    """De-duplication must not disturb the existing upsert/triage/purge behaviour."""
+    msg1 = _msg("dup1", subject="First subject", received_at=f"{TODAY.isoformat()}T09:00:00Z")
+    msg2 = _msg("dup1", subject="Second subject", received_at=f"{TODAY.isoformat()}T09:05:00Z")
+    other_old = _msg(
+        "old-msg", received_at=f"{(TODAY - timedelta(days=MAIL_RETENTION_DAYS + 10)).isoformat()}T09:00:00Z"
+    )
+    summary = import_mailbox(db, _mailbox([msg1, msg2, other_old]))
+    # "old-msg" is added (counted) then purged in the same pass, since retention purge
+    # runs after the add/update loop
+    assert summary["added"] == 2
+    assert summary["duplicates"] == 1
+    assert summary["purged"] == 1
+
+    row = _row(db, "dup1")
+    row.triage = "linked"
+    db.commit()
+
+    msg1b = _msg("dup1", subject="Third subject", received_at=f"{TODAY.isoformat()}T09:00:00Z")
+    msg2b = _msg("dup1", subject="Fourth subject", received_at=f"{TODAY.isoformat()}T09:05:00Z")
+    summary2 = import_mailbox(db, _mailbox([msg1b, msg2b]))
+    assert summary2["added"] == 0 and summary2["updated"] == 1 and summary2["duplicates"] == 1
+
+    row = _row(db, "dup1")
+    assert row.subject == "Fourth subject"
+    assert row.triage == "linked"
 
 
 def test_occurred_date_derivation(db):
@@ -258,7 +321,7 @@ def test_import_via_path_and_upload_endpoints(client, tmp_path):
     path.write_text(json.dumps(_mailbox([msg])), encoding="utf-8")
 
     result = client.post("/api/mail/import", json={"path": str(path)}).json()
-    assert result == {"added": 1, "updated": 0, "purged": 0}
+    assert result == {"added": 1, "updated": 0, "duplicates": 0, "purged": 0}
 
     assert client.post("/api/mail/import", json={"path": "/no/such/file.json"}).status_code == 404
 
@@ -271,7 +334,7 @@ def test_import_via_path_and_upload_endpoints(client, tmp_path):
         "/api/mail/import-upload",
         files={"file": ("mailbox.json", json.dumps(_mailbox([msg2])), "application/json")},
     ).json()
-    assert upload == {"added": 1, "updated": 0, "purged": 0}
+    assert upload == {"added": 1, "updated": 0, "duplicates": 0, "purged": 0}
 
     bad_upload = client.post(
         "/api/mail/import-upload",

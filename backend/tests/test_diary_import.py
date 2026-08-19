@@ -68,6 +68,7 @@ def test_import_upsert_and_reschedule_pair(db, tmp_path):
     summary = import_diary_file(db, path)
 
     assert summary["added"] == 3
+    assert summary["duplicates"] == 0
     assert summary["moved_pairs"] == 1
     assert summary["mailbox"] == "cae.office@bank.com"
     # unknown display name is surfaced, known one isn't
@@ -80,6 +81,7 @@ def test_import_upsert_and_reschedule_pair(db, tmp_path):
     # second import of identical file changes nothing
     summary2 = import_diary_file(db, path)
     assert summary2["added"] == 0 and summary2["unchanged"] == 3
+    assert summary2["duplicates"] == 0
 
 
 def test_linked_meeting_follows_move(db, tmp_path):
@@ -118,6 +120,75 @@ def test_linked_meeting_follows_move(db, tmp_path):
     assert meeting.diary_event_id == f"{APPT}|{new_slot}"
     assert meeting.needs_review is True
     assert meeting.scheduled_at == datetime(2026, 8, 5, 14, 0)
+
+
+def test_duplicate_event_id_deduplicated_last_wins(db, tmp_path):
+    """A real 1543-event export can contain the same id twice (all-day events /
+    recurring exceptions whose normalised occurrence timestamp coincides). With
+    autoflush=False, a naive add-vs-update loop would db.add() both occurrences
+    (the first isn't visible to db.get() until flushed) and the single flush at
+    the end would hit a primary-key collision. The importer must instead
+    de-duplicate up front, last occurrence wins, and report the collapse."""
+    occurrence = "2026-08-03T09:00:00Z"
+    event_id = f"{APPT}|{occurrence}"
+    path = _write_diary(
+        tmp_path,
+        [
+            _event(occurrence, subject="First version", lastModified="2026-07-28T09:00:00Z"),
+            _event(occurrence, subject="Second version", lastModified="2026-07-29T09:00:00Z"),
+        ],
+    )
+
+    summary = import_diary_file(db, path)
+
+    assert summary["added"] == 1
+    assert summary["duplicates"] == 1
+    assert db.query(DiaryEvent).count() == 1
+    row = db.get(DiaryEvent, event_id)
+    assert row is not None
+    assert row.subject == "Second version"
+    assert row.last_modified == "2026-07-29T09:00:00Z"
+
+
+def test_triple_duplicate_event_id_deduplicated(db, tmp_path):
+    occurrence = "2026-08-03T09:00:00Z"
+    event_id = f"{APPT}|{occurrence}"
+    path = _write_diary(
+        tmp_path,
+        [
+            _event(occurrence, subject="v1"),
+            _event(occurrence, subject="v2"),
+            _event(occurrence, subject="v3"),
+        ],
+    )
+
+    summary = import_diary_file(db, path)
+
+    assert summary["added"] == 1
+    assert summary["duplicates"] == 2
+    assert db.query(DiaryEvent).count() == 1
+    assert db.get(DiaryEvent, event_id).subject == "v3"
+
+
+def test_duplicate_id_with_missing_id_events_not_double_counted(db, tmp_path):
+    """Entries with no id at all keep the existing skip behaviour and must not
+    be swept into the duplicates count."""
+    occurrence = "2026-08-03T09:00:00Z"
+    no_id_event = _event(occurrence)
+    del no_id_event["id"]
+    path = _write_diary(
+        tmp_path,
+        [
+            no_id_event,
+            {**no_id_event},
+            _event("2026-08-10T09:00:00Z"),
+        ],
+    )
+
+    summary = import_diary_file(db, path)
+
+    assert summary["added"] == 1
+    assert summary["duplicates"] == 0
 
 
 def test_rejects_non_diary_json(db, tmp_path):

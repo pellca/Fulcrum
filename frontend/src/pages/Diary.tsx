@@ -13,6 +13,7 @@ interface ImportSummary {
   added: number
   updated: number
   unchanged: number
+  duplicates?: number
   moved_pairs: number
   meetings_updated: number
   unmatched_attendees: string[]
@@ -44,6 +45,7 @@ export default function Diary() {
         `Diary imported: ${summary.added} added, ${summary.updated} updated`,
         {
           description:
+            (summary.duplicates ? `${summary.duplicates} duplicate id(s) collapsed. ` : '') +
             (summary.moved_pairs ? `${summary.moved_pairs} meeting(s) detected as moved. ` : '') +
             (summary.meetings_updated ? `${summary.meetings_updated} linked meeting(s) followed the move — review flagged.` : ''),
         },

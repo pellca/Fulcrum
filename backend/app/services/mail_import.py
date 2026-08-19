@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..config import MAIL_RETENTION_DAYS
 from ..models import Link, MailMessage, Person, PersonAlias
+from .import_utils import dedupe_by_id
 
 SUPPORTED_VERSION = 1
 
@@ -48,10 +49,14 @@ def import_mailbox(db: Session, data: dict) -> dict:
     if version is not None and version != SUPPORTED_VERSION:
         raise ValueError(f"Unsupported mailbox.json version: {version!r}")
 
-    counts = {"added": 0, "updated": 0}
     for raw in messages:
         if not isinstance(raw, dict):
             raise ValueError(f"Malformed message entry: expected an object, got {type(raw).__name__}")
+
+    messages, duplicates = dedupe_by_id(messages)
+
+    counts = {"added": 0, "updated": 0}
+    for raw in messages:
         message_id = raw.get("id")
         if not message_id:
             continue
@@ -86,7 +91,7 @@ def import_mailbox(db: Session, data: dict) -> dict:
     purged = _purge_retention(db)
     db.commit()
 
-    return {**counts, "purged": purged}
+    return {**counts, "duplicates": duplicates, "purged": purged}
 
 
 def import_mail_file(db: Session, path: str | Path) -> dict:

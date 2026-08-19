@@ -57,7 +57,8 @@ The Outlook Diary Extractor runs on the corporate machine against the signed-in 
   ingests the output automatically (edit `modules/registry/outlook-diary-extractor.json` to point
   `cwd` at your extractor checkout and set your mailbox), or
 - **Different machine**: transfer `diary.json` and use **Import diary.json** on the Diary page
-  (or the `diary-import` module).
+  (or the `diary-import` module) — or, if browser uploads are DLP-inspected on that machine, skip
+  the browser entirely with `python import_data.py diary` (see "Scripted imports" below).
 
 Re-imports are incremental — the extractor's stable event ids make them idempotent.
 
@@ -82,35 +83,54 @@ idempotent and never disturb triage state. Mail you have **not** linked to anyth
 30 days (override with `FULCRUM_MAIL_RETENTION_DAYS`) to stop the database becoming a mail archive;
 anything you linked to an action, commitment or note is kept indefinitely as evidence.
 
-**On a corporate machine, prefer `import_mail.py` over the browser upload.** It reads
-`mailbox.json` and writes straight to `data/fulcrum.db` — the content never goes through an HTTP
+### Scripted imports (no browser)
+
+**On a corporate machine, prefer the scripted importers over the browser upload pages.** Each one
+reads a file and writes straight to `data/fulcrum.db` — the content never goes through an HTTP
 request, so it never gets near the bank's DLP inspection of browser uploads, and it works while
-`run.py` is already running:
+`run.py` is already running (WAL + a 5s busy-timeout absorb brief writer-lock contention instead of
+failing instantly). `import_data.py` is the one entry point for every importer; `import_mail.py`
+still works exactly as before — it's shorthand for `python import_data.py mail`:
 
 ```bat
 python import_mail.py
+python import_data.py diary
+python import_data.py register data\imports\register.csv
+python import_data.py people
 ```
+
+| Kind | Reads | Default file | `type` |
+|---|---|---|---|
+| `mail` | mailbox.json | `mailbox.json` | idempotent upsert by message id |
+| `diary` | diary.json | `diary.json` | idempotent upsert by event id |
+| `register` | CSV/XLSX | `register.csv` | actions/commitments/topics — a `type` column decides each row |
+| `actions` | CSV/XLSX | `actions.csv` | same importer as `register`; rows with no `type` column default to action |
+| `commitments` | CSV/XLSX | `commitments.csv` | ...default to commitment |
+| `topics` | CSV/XLSX | `topics.csv` | ...default to topic |
+| `people` | CSV/XLSX | `people.csv` | dedupes against existing people/aliases by name |
 
 | Flag | Effect |
 |---|---|
 | `--archive` | after a successful import, move the file to `archive/` next to it (timestamped, never overwrites) |
 | `--quiet` | print nothing on success |
 | `--json` | print a single JSON summary (`{"files": [...], "totals": {...}}`) instead of the human-readable lines |
+| `--dry-run` | CSV/XLSX kinds only — run the preview and print what would be created (including unmatched-owner/workstream/meeting warnings and skipped rows), writing nothing |
+| `--default-meeting-id N` | `register`/`actions`/`commitments`/`topics` only — link rows whose own meeting reference doesn't match to meeting `N` |
 
-Exit codes: `0` success, `1` unexpected error, `2` path not found, `3` malformed `mailbox.json`,
-`4` database error (e.g. locked — retry in a moment).
+Exit codes: `0` success, `1` unexpected error, `2` path not found (including an unrecognised
+`kind`), `3` malformed input, `4` database error (e.g. locked — retry in a moment).
 
-`--archive` and retention solve different problems and don't share a clock: retention prunes the
-**database** of unlinked mail after 30 days, but `--archive` keeps the raw export — full plaintext
-bodies included — in `data/imports/archive/` indefinitely, with nothing ever pruning it; clear that
-folder out periodically if you use `--archive` on a schedule.
+`--archive` and mail retention solve different problems and don't share a clock: retention prunes
+the **database** of unlinked mail after 30 days, but `--archive` keeps the raw export — full
+plaintext mail bodies included — in `data/imports/archive/` indefinitely, with nothing ever pruning
+it; clear that folder out periodically if you use `--archive` on a schedule.
 
-With no argument it picks up `data\imports\mailbox.json`, so a two-line Task Scheduler `.bat` chains
-the extractor straight into Fulcrum. Both defaults are working-directory-dependent —
-`export_mail.py`'s relative `--out` resolves against the caller's cwd, while `import_mail.py`'s
+With no PATH argument each kind picks up its default file under `data\imports\`, so a short Task
+Scheduler `.bat` chains an extractor straight into Fulcrum. Defaults are working-directory-dependent
+— an extractor's relative `--out` resolves against the caller's cwd, while `import_data.py`'s
 default is resolved relative to its own file — and Task Scheduler with a blank "Start in" runs jobs
 from `%windir%\System32`, so without a `cd` the export would write somewhere the importer never
-reads and you'd silently get no mail. Make the `.bat` self-locating instead:
+reads and you'd silently get nothing imported. Make the `.bat` self-locating instead:
 
 ```bat
 cd /d %~dp0
@@ -147,11 +167,12 @@ successful run. Runs appear on the Modules page with captured logs.
 
 ```
 run.py                 single entry point (uvicorn on :8742, serves frontend/dist)
+import_data.py          scripted (no-browser) import CLI — every kind; import_mail.py is shorthand for `mail`
 backend/app/
   models/              SQLAlchemy 2.0 (SQLite, WAL) — people, register, meetings, horizon, mail, ops
   api/                 FastAPI routers — everything is a REST endpoint (docs at /api/docs)
   services/            agenda scoring, quick-add parser, diary + mail import, risk chains,
-                       CSV import, register export, seed
+                       CSV import, register export, seed, cli_import (shared scripted-import harness)
   modules/runner.py    manifest registry + subprocess runner
 frontend/              React 19 + Vite + Tailwind 4 (TypeScript), TanStack Query, FullCalendar, dnd-kit
 tools/mail_extractor/  Outlook COM mail export (Windows) over a pure, tested normalisation layer
