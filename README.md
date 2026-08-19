@@ -15,9 +15,11 @@ Internal Audit & Investigations function.
 | **Topics** | Discussion items competing for meeting time, with intent (decide / inform / consult / shape), duration and readiness |
 | **Meetings** | Forums (recurring governance meetings with a time budget) → meeting instances → **agenda builder** that *ranks* candidate topics with a transparent score and packs them into the capacity, drag-to-reorder, printable agenda, post-meeting decision capture that spawns follow-up actions |
 | **Planner** | Timeline of every moving part per workstream, hard external deadlines, dependency edges (`blocks` / `precedes`) and **risk chains** — anything downstream of a late/blocked/at-risk item is flagged |
+| **Mailbox** | Last 1–5 days of Inbox + Sent Items as a **triage queue**: per email, ranked suggestions of the actions/commitments it probably concerns, then one keystroke to log a chase, spawn an action, close one with the email as evidence, write a People Note, or dismiss. Linked emails are kept forever and are clickable from the record they're attached to |
 | **Diary** | Imports `diary.json` from the [Outlook Diary Extractor](../OutlookDiaryExtractor); detects rescheduled meetings (cancel + re-create pairs), auto-moves linked meetings, and reconciles attendee display names to people via aliases |
+| **People** | The directory behind every owner field, plus **People Notes** (feedback, call notes, observations) and **1:1 packs** — one click gives you everything a person owns, owes, and hasn't discussed with you yet |
 | **Modules** | Manifest-registered external tools runnable from the browser with live logs — the seam where future agentic capabilities plug in |
-| **Settings** | One-click DB backup, full JSON export, demo-data loader, and scoped clears (demo only / diary only / everything) |
+| **Settings** | One-click DB backup, full JSON export, demo-data loader, and scoped clears (demo / diary / mail / everything) |
 
 ## Quick start
 
@@ -33,7 +35,8 @@ cd frontend && npm install && npm run build && cd ..
 Dev mode (hot reload): run `uvicorn app.main:app --reload --port 8742` from `backend/`, and
 `npm run dev` in `frontend/` (Vite proxies `/api`).
 
-Tests: `cd backend && ../.venv/bin/python -m pytest tests`
+Tests: `cd backend && ../.venv/bin/python -m pytest tests` (and `.venv/bin/python -m pytest
+tools/mail_extractor/tests` for the extractor's pure layer, which runs anywhere — no Outlook needed).
 
 ## Corporate laptop deployment
 
@@ -57,6 +60,27 @@ The Outlook Diary Extractor runs on the corporate machine against the signed-in 
   (or the `diary-import` module).
 
 Re-imports are incremental — the extractor's stable event ids make them idempotent.
+
+### Feeding it your mailbox
+
+`tools/mail_extractor/export_mail.py` is the same trick for mail: desktop Outlook COM (Graph
+blocked, PowerShell in Constrained Language Mode), writing `mailbox.json`. It ships **inside this
+repo**, so there is nothing extra to copy.
+
+```bat
+python export_mail.py --days 5 --out C:\mail\mailbox.json
+```
+
+Run the pre-flight in `tools/mail_extractor/README.md` first — it confirms Outlook COM works and,
+more importantly, that SMTP addresses resolve for senders and recipients (on Exchange these often
+come back as X.500 DNs; the extractor falls back to GAL resolution, and the pre-flight tells you
+which path your tenant takes). Then run it on a Task Scheduler cadence and either use the
+`outlook-mail-extractor` module or **Import mailbox.json** on the Mailbox page.
+
+Each run exports the whole window and the importer upserts by message id, so re-imports are
+idempotent and never disturb triage state. Mail you have **not** linked to anything is purged after
+30 days (override with `FULCRUM_MAIL_RETENTION_DAYS`) to stop the database becoming a mail archive;
+anything you linked to an action, commitment or note is kept indefinitely as evidence.
 
 ## Adding a module
 
@@ -85,11 +109,13 @@ successful run. Runs appear on the Modules page with captured logs.
 ```
 run.py                 single entry point (uvicorn on :8742, serves frontend/dist)
 backend/app/
-  models/              SQLAlchemy 2.0 (SQLite, WAL) — people, register, meetings, horizon, ops
+  models/              SQLAlchemy 2.0 (SQLite, WAL) — people, register, meetings, horizon, mail, ops
   api/                 FastAPI routers — everything is a REST endpoint (docs at /api/docs)
-  services/            agenda scoring, quick-add parser, diary import, risk chains, CSV import, seed
+  services/            agenda scoring, quick-add parser, diary + mail import, risk chains,
+                       CSV import, register export, seed
   modules/runner.py    manifest registry + subprocess runner
 frontend/              React 19 + Vite + Tailwind 4 (TypeScript), TanStack Query, FullCalendar, dnd-kit
+tools/mail_extractor/  Outlook COM mail export (Windows) over a pure, tested normalisation layer
 modules/registry/      module manifests
 data/                  fulcrum.db + import inbox (gitignored)
 ```
@@ -100,10 +126,16 @@ Design choices that matter for what comes next:
   the same surface a human does.
 - **Module manifests** are the tool-registration mechanism agents will reuse.
 - **Generic `link` edges** connect anything to anything (`blocks`, `precedes`, `informs`,
-  `relates`) — dependency logic, decision→action trails and topic↔commitment ties all ride on it.
+  `relates`) — dependency logic, decision→action trails, topic↔commitment ties and email→record
+  evidence all ride on it. A link is also what makes an email permanent: the retention purge skips
+  anything referenced by one.
 - **`is_demo` flag** on every user-domain row keeps demo data separable from real data.
 - Quick-add grammar: `Chase the pack @sarah #credit due:fri !high` (`due:` accepts ISO dates,
-  `today`, `tomorrow`, `+N`, weekday names).
+  `today`, `tomorrow`, `+N`, weekday names). Switch quick-add's type to **Note** and the same box
+  writes a People Note — `handled the walkthrough well @sarah kind:feedback` (the `@person` is
+  required; `kind:` is optional).
+- **Outlook stays the mail client.** The Mailbox pane is a triage surface, not a mail app — no
+  sending, no HTML rendering, no attachments; replies hand off to Outlook via `mailto:`.
 
 ## Roadmap — the dream list
 
@@ -133,7 +165,7 @@ Everything below attaches through the existing seams (REST API, module registry,
 |---|---|---|---|---|
 | **SARA ingest module** | Module that reads SARA audit/issue exports; audits become workstreams, issue due dates become key dates, overdue issues feed risk chains. | ★★★ | M–L¹ | free |
 | **Diary auto-sync watcher** | Watches a folder (e.g. OneDrive-synced) for a fresh `diary.json` and imports it automatically — zero-touch diary. | ★★ | S | free |
-| **Outlook draft handoff** | Chases and agendas open as pre-filled Outlook drafts (`.eml`/mailto — no Graph API needed). | ★★ | S | free |
+| **Outlook draft handoff** ◐ *part-shipped* | Chases and agendas open as pre-filled Outlook drafts (`.eml`/mailto — no Graph API needed). The Mailbox pane already hands off replies via `mailto:`; the chase-queue and agenda paths remain. | ★★ | S | free |
 | **Mailbox triage pane** ✅ *shipped* | `export_mail.py` (COM, sibling of the diary extractor) feeds Inbox + Sent Items into a triage pane: suggestions rank matching actions per email; log chases, spawn/close actions, push People Notes, dismiss — one keystroke per email. | ★★★ | L | free |
 | **SharePoint push + Power Automate chaser** | Diff-export actions into a OneDrive-synced library folder; flows upsert a SharePoint List and send throttled per-owner chase emails. No Graph anywhere. | ★★★ | M | free |
 | **Teams deep links** | Meetings carry a "Join"/chat link; topics link to their Teams channel. | ★ | S | free |
@@ -174,6 +206,7 @@ Everything below attaches through the existing seams (REST API, module registry,
 | Feature | What it does | Value | Effort | Cost |
 |---|---|---|---|---|
 | **Global search (Ctrl+/)** ✅ *shipped* | Full-text across actions, commitments, topics, decisions, diary, chase notes. | ★★ | S–M | free |
+| **Register export** ✅ *shipped* | Whole register to an Excel workbook or CSV zip, optionally with chase history and the link/dependency graph — the artefact you attach to a paper or hand to a BPM. | ★★ | S | free |
 | **Item history / audit trail** | What changed and when on every item — evidence-grade record keeping, fitting for an audit function. | ★★ | M | free |
 | **Notifications** | Local scheduled task fires Windows toasts / digest emails for chases due and hard deadlines approaching. | ★★ | M | free |
 | **Automated versioned backups** | Snapshot `fulcrum.db` on every launch, keep N days — recover from anything. | ★★ | S | free |
@@ -186,9 +219,18 @@ Everything below attaches through the existing seams (REST API, module registry,
 
 High value ÷ low effort first, and each step feeds the next:
 
-1. **1:1 packs** + **decision review dates** + **data quality panel** (three S items, immediate daily payoff)
-2. **Diary auto-sync watcher** + **cadence auto-generation** + **automated backups** (removes routine friction)
-3. **Chase drafter** — first AI feature; the chase queue already supplies perfect context
+1. **SharePoint push + Power Automate chaser** — closes the loop the Mailbox pane opened: Fulcrum
+   stops being the only place the register lives, and owners get chased without the CoS typing
+   anything. Needs no Graph — a OneDrive-synced library folder is the transport.
+2. **Data quality panel** + **automated backups** + **diary auto-sync watcher** (three S items that
+   remove routine friction and keep the register trustworthy)
+3. **Chase drafter** — first AI feature; the chase queue and the mail history now supply perfect
+   context, and the Mailbox action rail is the natural home for it
 4. **Meeting pack generator** + **forward agenda planning** (the meeting engine becomes decisive)
 5. **SARA ingest** (when an export path is confirmed)
-6. **Critical-path scheduling**, then the **morning briefing agent**, building toward the **autonomous ops agent**
+6. **Critical-path scheduling**, then the **morning briefing agent**, building toward the
+   **autonomous ops agent**
+
+Shipped so far: the whole **Outlook bridge** (mail extractor → ingest → triage pane → verbs →
+click-through evidence), **People Notes**, **register export**, plus the earlier 1:1 packs, decision
+review dates, capacity heatmap, recurring topics and global search.
