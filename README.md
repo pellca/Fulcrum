@@ -220,6 +220,41 @@ downstream reader never sees a torn file. Encoding is UTF-8 without BOM.
 
 ---
 
+## Timezones
+
+**The pywin32 gotcha:** COM datetimes handed back by pywin32/pywintypes
+(`item.Start`, `item.End`, `item.LastModificationTime`) are *not* naive, but
+they're not honestly timezone-aware either — `tzinfo` is a fixed zero/UTC
+offset while the wall-clock fields (year/month/day/hour/minute) are already
+local time. Code that does `if dt.tzinfo is None: attach local tz` never
+fires that branch on a real COM value, so the mislabelled datetime passes
+straight through and gets formatted as local wall clock stamped `+00:00` —
+wrong by the DST offset (e.g. an hour, in UK summer) as an actual instant in
+time, even though the printed string looks plausible.
+
+**Correct handling:** `_ensure_aware()` in `export_diary.py` discards the
+COM tzinfo and re-derives it from the wall clock: `dt.replace(tzinfo=None)`
+strips the bogus offset to give a naive datetime holding the (correct) local
+wall clock, then `.astimezone()` interprets that naive value as local time
+and attaches the right offset **for that specific date**, so DST is resolved
+per-date rather than inherited from whatever offset COM handed us.
+
+**Operator warning — a re-export after this fix changes event ids.** The
+merge `id` is `<GlobalAppointmentID>|<occurrenceStartUtc ISO>`, and the UTC
+instant for every summer-dated (BST) event shifts by an hour once the fix is
+applied. That means every summer event gets a **new id** on the first
+re-export after upgrading. Do **not** run that re-export against your
+existing `diary.json` with the normal incremental-merge flow: the old
+(wrong) ids won't match the new (correct) ones, so the merge will see a full
+set of "new" events and a full set of "existing events missing from the
+pull," and will import it as a **mass phantom reschedule** (every summer
+event cancelled and re-added). Instead, point the first post-fix run at a
+**fresh output filename** (or use `--full-resync` into a new file), verify
+the timestamps look right, and only then treat it as the new source of
+truth.
+
+---
+
 ## Performance (Python implementation)
 
 Essentially all runtime is **COM round-trips**: every property read on an

@@ -187,11 +187,25 @@ def get_restrict_datetime(dt):
 # ============================================================================
 
 def _ensure_aware(dt):
-    """COM datetimes from pywin32 are timezone-aware (pywintypes uses local tz).
-    Normalize defensively: if naive, attach the local timezone."""
-    if dt.tzinfo is None:
-        return dt.astimezone()
-    return dt
+    """Re-anchor a pywin32 COM datetime to its correct local offset.
+
+    pywin32/pywintypes datetimes are NOT naive and NOT honestly aware: they
+    come back with tzinfo already attached, but that tzinfo is a fixed
+    zero/UTC offset while the wall-clock fields (year/month/.../hour/minute)
+    are already local time. So `dt.tzinfo is None` never fires and a naive
+    check does nothing -- the mislabelled value passes straight through, and
+    downstream ISO formatting faithfully renders local wall clock stamped
+    "+00:00". In UK summer (BST) every timestamp ends up an hour off as an
+    instant, even though it prints something that looks plausible.
+
+    The fix is to DISCARD the COM tzinfo and let the platform re-derive the
+    offset from the wall-clock fields: strip tzinfo to get a naive datetime
+    holding the (correct) local wall clock, then call .astimezone(), which
+    for a naive input interprets it as local time and attaches the right
+    offset for that specific date -- so DST is resolved per-date rather than
+    inherited from whatever (wrong) offset COM handed us.
+    """
+    return dt.replace(tzinfo=None).astimezone()
 
 
 def _attach_to_outlook():
