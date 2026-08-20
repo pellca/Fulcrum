@@ -101,6 +101,32 @@ def _person_references(db: Session, person_ids: list[int]) -> list[dict]:
     return findings
 
 
+def _meeting_cascade_warnings(db: Session, meeting_ids: list) -> list[dict]:
+    """Agenda items and decisions that these meetings take with them."""
+    warnings: list[dict] = []
+    if not meeting_ids:
+        return warnings
+    agenda = db.query(AgendaItem).filter(AgendaItem.meeting_id.in_(meeting_ids))
+    if agenda.count():
+        warnings.append(
+            {
+                "label": "agenda items that will be removed",
+                "count": agenda.count(),
+                "examples": [a.topic.title for a in agenda.limit(6)],
+            }
+        )
+    decisions = db.query(Decision).filter(Decision.meeting_id.in_(meeting_ids))
+    if decisions.count():
+        warnings.append(
+            {
+                "label": "decisions that will lose their meeting",
+                "count": decisions.count(),
+                "examples": [d.title for d in decisions.limit(6)],
+            }
+        )
+    return warnings
+
+
 def check_references(db: Session, entity_type: str, ids: list) -> dict:
     """Preflight: what a delete would affect. Never mutates anything."""
     model = DELETABLE.get(entity_type)
@@ -124,14 +150,18 @@ def check_references(db: Session, entity_type: str, ids: list) -> dict:
             )
     elif entity_type == "forum" and found_ids:
         meetings = db.query(Meeting).filter(Meeting.forum_id.in_(found_ids))
-        if meetings.count():
+        meeting_count = meetings.count()
+        if meeting_count:
+            meeting_rows = meetings.limit(6).all()
             warnings.append(
                 {
                     "label": "meetings that will be deleted with it",
-                    "count": meetings.count(),
-                    "examples": [f"{m.forum.name} — {m.scheduled_at:%d %b %Y}" for m in meetings.limit(6)],
+                    "count": meeting_count,
+                    "examples": [f"{m.forum.name} — {m.scheduled_at:%d %b %Y}" for m in meeting_rows],
                 }
             )
+            meeting_ids = [m.id for m in db.query(Meeting.id).filter(Meeting.forum_id.in_(found_ids)).all()]
+            warnings.extend(_meeting_cascade_warnings(db, meeting_ids))
     elif entity_type == "topic" and found_ids:
         agenda = db.query(AgendaItem).filter(AgendaItem.topic_id.in_(found_ids))
         if agenda.count():
@@ -141,6 +171,20 @@ def check_references(db: Session, entity_type: str, ids: list) -> dict:
                     "count": agenda.count(),
                     "examples": [
                         f"{a.meeting.forum.name} — {a.meeting.scheduled_at:%d %b %Y}" for a in agenda.limit(6)
+                    ],
+                }
+            )
+    elif entity_type == "meeting" and found_ids:
+        warnings.extend(_meeting_cascade_warnings(db, found_ids))
+    elif entity_type == "diary_event" and found_ids:
+        meetings = db.query(Meeting).filter(Meeting.diary_event_id.in_(found_ids))
+        if meetings.count():
+            warnings.append(
+                {
+                    "label": "meetings that will be unlinked",
+                    "count": meetings.count(),
+                    "examples": [
+                        f"{m.forum.name} — {m.scheduled_at:%d %b %Y}" for m in meetings.limit(6)
                     ],
                 }
             )
@@ -168,12 +212,22 @@ def check_references(db: Session, entity_type: str, ids: list) -> dict:
                 {"label": "chase history entries that will be lost", "count": chase_count, "examples": []}
             )
 
+    def _title(r):
+        if entity_type == "diary_event":
+            return f"{r.start_date} {r.start_time} — {r.subject}"
+        return (
+            getattr(r, "title", None)
+            or getattr(r, "name", None)
+            or getattr(r, "subject", None)
+            or str(r.id)
+        )
+
     return {
         "type": entity_type,
         "label": LABELS.get(entity_type, entity_type),
         "requested": len(ids),
         "found": len(found_ids),
-        "titles": [getattr(r, "title", None) or getattr(r, "name", None) or str(r.id) for r in rows[:20]],
+        "titles": [_title(r) for r in rows[:20]],
         "warnings": warnings,
     }
 

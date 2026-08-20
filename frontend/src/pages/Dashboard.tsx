@@ -13,7 +13,7 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { api, type ChaseQueueItem, type DashboardSummary, type DashItem } from '../api'
-import { Badge, Button, Card, EmptyState, fmtDate, fmtDateTime, PageHeader, priorityTone, Spinner, StatusBadge } from '../components/ui'
+import { Badge, Button, Card, CapacityBar, EmptyState, fmtDate, fmtDateTime, PageHeader, priorityTone, Spinner, StatusBadge } from '../components/ui'
 import { RiskChainsCard } from '../components/RiskChains'
 
 function exportPdf() {
@@ -245,12 +245,7 @@ export default function Dashboard() {
                         {m.agenda_count} items · {m.allocated_minutes}/{m.capacity_minutes} min
                       </span>
                     </div>
-                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                      <div
-                        className={`h-full rounded-full ${m.allocated_minutes > m.capacity_minutes ? 'bg-rose-500' : 'bg-indigo-500'}`}
-                        style={{ width: `${Math.min(100, (m.allocated_minutes / m.capacity_minutes) * 100)}%` }}
-                      />
-                    </div>
+                    <CapacityBar allocated={m.allocated_minutes} capacity={m.capacity_minutes} size="sm" className="mt-1.5" />
                   </Link>
                 ))}
               </div>

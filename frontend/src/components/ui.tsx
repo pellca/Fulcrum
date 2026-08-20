@@ -129,6 +129,55 @@ export function StatusBadge({ status }: { status: string }) {
   return <Badge tone={statusTone[status] ?? 'slate'}>{status.replace('_', ' ')}</Badge>
 }
 
+export const intentTone: Record<string, string> = { decide: 'indigo', inform: 'blue', consult: 'violet', shape: 'amber' }
+
+export function IntentBadge({ intent }: { intent: string }) {
+  return <Badge tone={intentTone[intent] ?? 'slate'}>{intent}</Badge>
+}
+
+// Solid fills for grid cells — e.g. a matrix where intent is the cell background.
+export const intentSolid: Record<string, string> = {
+  decide: 'bg-indigo-500 text-white',
+  inform: 'bg-sky-500 text-white',
+  consult: 'bg-violet-500 text-white',
+  shape: 'bg-amber-500 text-white',
+  slate: 'bg-slate-400 text-white',
+}
+
+export function allocatedMinutes(items: { allocated_minutes: number }[]): number {
+  return items.reduce((sum, item) => sum + item.allocated_minutes, 0)
+}
+
+export function CapacityBar({
+  allocated,
+  capacity,
+  size = 'md',
+  className,
+}: {
+  allocated: number
+  capacity: number
+  size?: 'sm' | 'md'
+  className?: string
+}) {
+  const over = allocated > capacity
+  const noCapacity = capacity <= 0
+  const pct = noCapacity ? (allocated > 0 ? 100 : 0) : Math.min(100, (allocated / capacity) * 100)
+  return (
+    <div
+      className={cn(
+        'overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800',
+        size === 'sm' ? 'h-1.5' : 'h-2',
+        className,
+      )}
+    >
+      <div
+        className={cn('h-full rounded-full transition-all', over || (noCapacity && allocated > 0) ? 'bg-rose-500' : 'bg-indigo-500')}
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  )
+}
+
 // ---------- form fields ----------
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {

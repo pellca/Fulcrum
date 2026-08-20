@@ -1,10 +1,11 @@
+from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session, selectinload
 
 from ..db import get_db
-from ..models import AgendaItem, Decision, Forum, Meeting, Topic
+from ..models import AgendaItem, Decision, DiaryEvent, Forum, Meeting, Topic
 from ..schemas import (
     AgendaItemIn,
     AgendaItemPatch,
@@ -18,6 +19,7 @@ from ..schemas import (
     MeetingIn,
     MeetingOut,
     MeetingPatch,
+    RollingAgendaOut,
     ScoredTopic,
     TopicIn,
     TopicOut,
@@ -58,6 +60,141 @@ def update_forum(forum_id: int, body: ForumPatch, db: Session = Depends(get_db))
 @router.delete("/forums/{forum_id}", status_code=204)
 def delete_forum(forum_id: int, db: Session = Depends(get_db)):
     delete_entities(db, "forum", [forum_id])
+
+
+@router.get("/forums/{forum_id}/rolling-agenda", response_model=RollingAgendaOut)
+def rolling_agenda(
+    forum_id: int,
+    limit: int = Query(8, ge=1, le=24),
+    include_past: bool = False,
+    db: Session = Depends(get_db),
+):
+    """Single-pane-of-glass forward view for one forum: the agendas of its next
+    `limit` meetings side by side, pivoted so a row is a topic and a column is a
+    meeting. A `recurring` standing item legitimately sits on many meetings, so
+    it produces one row with several filled cells rather than several rows.
+
+    `include_past=false` (default) reuses the exact expression `list_meetings`
+    uses for `upcoming_only` (`scheduled_at >= now - 12h`), so this view and the
+    plain meetings list never disagree about what counts as "upcoming".
+    `include_past=true` returns the earliest `limit` meetings of the forum,
+    past or future. `limit` is bounded to 1-24 (enforced, not silently clamped
+    — see OpenAPI).
+
+    Loader chain (constant number of statements regardless of how many meetings
+    or agenda items exist) — 6 SELECTs, or 7 when at least one of the returned
+    meetings has a diary link:
+      1. `db.get(Forum, ...)` for the forum
+      2. the meetings query itself
+      3. `selectinload(Meeting.agenda_items)` for every agenda item on those
+         meetings, in one batch
+      4. `selectinload(AgendaItem.topic)` for the distinct topics referenced,
+         in one batch
+      5. `selectinload(Topic.sponsor)` for the distinct sponsors referenced,
+         in one batch
+      6. `selectinload(Topic.workstream)` for the distinct workstreams
+         referenced, in one batch
+      7. (conditional) one `DiaryEvent.id.in_(...)` batch query (id, location
+         only) for the linked diary events, to fill in
+         `RollingMeetingOut.location`
+    """
+    forum = db.get(Forum, forum_id)
+    if not forum:
+        raise HTTPException(404)
+
+    query = db.query(Meeting).filter(Meeting.forum_id == forum_id)
+    if not include_past:
+        query = query.filter(Meeting.scheduled_at >= datetime.now() - timedelta(hours=12))
+    meetings = (
+        query.options(
+            selectinload(Meeting.agenda_items)
+            .selectinload(AgendaItem.topic)
+            .selectinload(Topic.sponsor),
+            selectinload(Meeting.agenda_items)
+            .selectinload(AgendaItem.topic)
+            .selectinload(Topic.workstream),
+        )
+        .order_by(Meeting.scheduled_at)
+        .limit(limit)
+        .all()
+    )
+
+    diary_ids = [m.diary_event_id for m in meetings if m.diary_event_id]
+    locations: dict[str, Optional[str]] = {}
+    if diary_ids:
+        locations = dict(
+            db.query(DiaryEvent.id, DiaryEvent.location)
+            .filter(DiaryEvent.id.in_(diary_ids))
+            .all()
+        )
+
+    n = len(meetings)
+    meeting_index = {m.id: idx for idx, m in enumerate(meetings)}
+    meetings_out = [
+        {
+            "id": m.id,
+            "scheduled_at": m.scheduled_at,
+            "status": m.status,
+            "diary_event_id": m.diary_event_id,
+            "needs_review": m.needs_review,
+            "location": locations.get(m.diary_event_id) if m.diary_event_id else None,
+            "allocated_minutes": sum(item.allocated_minutes for item in m.agenda_items),
+            "capacity_minutes": forum.capacity_minutes,
+            "item_count": len(m.agenda_items),
+        }
+        for m in meetings
+    ]
+
+    # pivot: one row per topic, cells positionally aligned to `meetings_out`
+    topic_rows: dict[int, dict] = {}
+    for m in meetings:
+        idx = meeting_index[m.id]
+        for item in m.agenda_items:
+            topic = item.topic
+            row = topic_rows.get(topic.id)
+            if row is None:
+                row = {"topic": topic, "cells": [None] * n, "first_idx": idx}
+                topic_rows[topic.id] = row
+            row["cells"][idx] = {
+                "agenda_item_id": item.id,
+                "meeting_id": m.id,
+                "sequence": item.sequence,
+                "allocated_minutes": item.allocated_minutes,
+                "outcome_note": item.outcome_note,
+            }
+
+    bands: dict[Optional[int], dict] = {}
+    for row in topic_rows.values():
+        workstream = row["topic"].workstream
+        key = workstream.id if workstream else None
+        band = bands.get(key)
+        if band is None:
+            band = {
+                "workstream": workstream,
+                "label": workstream.name if workstream else "Unassigned",
+                "category": workstream.category if workstream else None,
+                "rows": [],
+            }
+            bands[key] = band
+        band["rows"].append(row)
+
+    for band in bands.values():
+        band["rows"].sort(key=lambda r: (r["first_idx"], r["topic"].title))
+
+    bands_out = [
+        {
+            "workstream": band["workstream"],
+            "label": band["label"],
+            "category": band["category"],
+            "rows": [{"topic": r["topic"], "cells": r["cells"]} for r in band["rows"]],
+        }
+        for band in sorted(
+            bands.values(),
+            key=lambda b: (b["workstream"] is None, b["category"] or "", b["label"]),
+        )
+    ]
+
+    return {"forum": forum, "meetings": meetings_out, "bands": bands_out}
 
 
 # ---------- meetings ----------

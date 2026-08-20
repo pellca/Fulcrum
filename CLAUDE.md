@@ -92,6 +92,9 @@ malformed content so the HTTP layer can return 422 and the CLI can exit 3.
 - **Outlook stays the mail client.** The Mailbox pane is a triage surface: no sending, no HTML
   rendering, no attachments. Replies hand off via `mailto:`.
 - **Never commit `data/`.** It holds the real register, real mail bodies and real people notes.
+- **pywin32 COM datetimes lie about their zone.** They arrive aware with a zero (UTC-labelled)
+  offset while the wall-clock fields are already local. Never write `if dt.tzinfo is None` against
+  them — re-anchor with `dt.replace(tzinfo=None).astimezone()`.
 
 ## Testing
 

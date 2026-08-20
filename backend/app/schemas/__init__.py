@@ -402,6 +402,62 @@ class AgendaItemPatch(BaseModel):
     outcome_note: Optional[str] = None
 
 
+# ---------- rolling agenda (forum single-pane-of-glass forward view) ----------
+# RollingTopicOut is deliberately its own model (not TopicMini/TopicOut) so this
+# view's payload can evolve without touching the four other pages that embed
+# TopicMini/WorkstreamMini as-is.
+
+class RollingTopicOut(ORMModel):
+    id: int
+    title: str
+    intent: str
+    duration_minutes: int
+    readiness: str
+    status: str
+    recurring: bool = False
+    target_by: Optional[date]
+    papers_url: Optional[str]
+    sponsor: Optional[PersonMini]
+
+
+class RollingCellOut(BaseModel):
+    agenda_item_id: int
+    meeting_id: int
+    sequence: int
+    allocated_minutes: int
+    outcome_note: Optional[str]
+
+
+class RollingMeetingOut(BaseModel):
+    id: int
+    scheduled_at: datetime
+    status: str
+    diary_event_id: Optional[str]
+    needs_review: bool
+    location: Optional[str]  # from the linked DiaryEvent, else None
+    allocated_minutes: int
+    capacity_minutes: int
+    item_count: int
+
+
+class RollingRowOut(BaseModel):
+    topic: RollingTopicOut
+    cells: list[Optional[RollingCellOut]]  # positionally aligned to RollingAgendaOut.meetings
+
+
+class RollingBandOut(BaseModel):
+    workstream: Optional[WorkstreamMini]  # None == unassigned
+    label: str  # workstream.name, or "Unassigned"
+    category: Optional[str]  # Workstream.category
+    rows: list[RollingRowOut]
+
+
+class RollingAgendaOut(BaseModel):
+    forum: ForumOut
+    meetings: list[RollingMeetingOut]
+    bands: list[RollingBandOut]
+
+
 class ScoredTopic(BaseModel):
     topic: TopicOut
     score: float
@@ -488,6 +544,53 @@ class DiaryEventOut(ORMModel):
     status: str
     cancelled_at: Optional[str]
     moved_to_event_id: Optional[str]
+
+
+class LinkSuggestionOut(BaseModel):
+    meeting_id: int
+    forum_name: str
+    forum_colour: str
+    scheduled_at: datetime
+    diary_event_id: str
+    subject: Optional[str] = None
+    event_start_date: Optional[str] = None
+    event_start_time: Optional[str] = None
+    location: Optional[str] = None
+    minutes_apart: float
+    score: float
+    confidence: Literal["high", "likely"]
+    reasons: list[str]
+
+
+class DiaryCreateMeetingIn(BaseModel):
+    diary_event_id: str
+    forum_id: Optional[int] = None
+    new_forum_name: Optional[str] = None
+    new_forum_colour: str = "#0ea5e9"
+    new_forum_capacity_minutes: Optional[int] = Field(None, ge=15, le=480)
+    status: Literal["planned", "agenda_set", "held", "cancelled"] = "planned"
+
+
+class DiaryPurgeIn(BaseModel):
+    from_date: str
+    to_date: str
+    include_cancelled: bool = True
+
+
+class DiaryPurgeConfirmIn(DiaryPurgeIn):
+    confirm: str = Field(description='Must be the literal string "DELETE"')
+
+
+class DiaryPurgePreviewOut(BaseModel):
+    events: int
+    linked_meetings: int
+    examples: list[str]
+    meeting_examples: list[str]
+
+
+class DiaryPurgeResultOut(BaseModel):
+    deleted: int
+    meetings_unlinked: int
 
 
 # ---------- ops ----------

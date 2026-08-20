@@ -207,6 +207,30 @@ a message lands on in the UI.
 
 ---
 
+## Timezones
+
+**The pywin32 gotcha:** COM datetimes handed back by pywin32/pywintypes
+(`item.SentOn`, `item.ReceivedTime`) are *not* naive, but they're not
+honestly timezone-aware either — `tzinfo` is a fixed zero/UTC offset while
+the wall-clock fields (year/month/day/hour/minute) are already local time.
+Code that does `if dt.tzinfo is None: attach local tz` never fires that
+branch on a real COM value, so the mislabelled datetime passes straight
+through and gets formatted as local wall clock stamped `+00:00` — wrong by
+the DST offset (e.g. an hour, in UK summer) as an actual instant in time,
+even though the printed string looks plausible. Downstream this shows up as
+`sent_at`/`received_at` being an hour off, and `occurred_date` day-bucketing
+near midnight landing on the wrong day.
+
+**Correct handling:** `_ensure_aware()` in `export_mail.py` discards the COM
+tzinfo and re-derives it from the wall clock: `dt.replace(tzinfo=None)`
+strips the bogus offset to give a naive datetime holding the (correct) local
+wall clock, then `.astimezone()` interprets that naive value as local time
+and attaches the right offset **for that specific date**, so DST is
+resolved per-date rather than inherited from whatever offset COM handed us.
+Mirrors `OutlookDiaryExtractor/export_diary.py`'s `_ensure_aware`.
+
+---
+
 ## COM implementation notes
 
 **Restrict() date format.** `Items.Restrict("[ReceivedTime] >= '<date>'")`

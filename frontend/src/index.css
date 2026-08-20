@@ -52,6 +52,33 @@ body {
     text-decoration: none !important;
     color: inherit !important;
   }
+
+  /* Rolling agenda: the on-screen table IS the printed artefact, so it needs the
+     grid to survive pagination. Scoped to the body class the page sets while
+     printing, so other pages' portrait output is untouched. */
+  body.print-landscape thead {
+    /* repeat the meeting-date header on every page — without this, page 2 is an
+       unlabelled grid of numbers */
+    display: table-header-group;
+  }
+  body.print-landscape tr {
+    break-inside: avoid;
+  }
+  body.print-landscape table {
+    break-inside: auto;
+  }
+  body.print-landscape .overflow-x-auto {
+    overflow: visible !important;
+  }
+  body.print-landscape .sticky {
+    position: static !important;
+  }
+  /* Chrome strips background fills when printing unless told otherwise; without
+     this the intent chips print as blank cells and the grid loses its meaning. */
+  body.print-landscape .agenda-chip {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
 }
 
 /* FullCalendar theming */

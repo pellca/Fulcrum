@@ -2,7 +2,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, FileDown } from 'lucide-react'
 import { api, markNotesDiscussed, type PersonNoteKind } from '../api'
-import { Badge, Button, Card, EmptyState, fmtDate, priorityTone, Spinner, StatusBadge } from '../components/ui'
+import { Badge, Button, Card, EmptyState, fmtDate, IntentBadge, priorityTone, Spinner, StatusBadge } from '../components/ui'
 
 const noteKindTone: Record<PersonNoteKind, string> = {
   feedback: 'violet',
@@ -166,7 +166,7 @@ export default function OneToOnePack() {
                 <div key={topic.id} className="flex items-center justify-between gap-2 py-1.5">
                   <div className="min-w-0 truncate text-[13px] font-medium">{topic.title}</div>
                   <div className="flex shrink-0 items-center gap-1.5">
-                    <Badge tone="indigo">{topic.intent}</Badge>
+                    <IntentBadge intent={topic.intent} />
                     <Badge tone={topic.readiness === 'ready' ? 'green' : 'slate'}>{topic.readiness}</Badge>
                     {topic.target_by && <Badge tone="amber">by {fmtDate(topic.target_by)}</Badge>}
                   </div>

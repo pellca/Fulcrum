@@ -1,21 +1,25 @@
 import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { DndContext, closestCenter, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { ArrowLeft, GripVertical, Plus, Printer, Trash2 } from 'lucide-react'
+import { ArrowLeft, GripVertical, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
 import { api, type Decision, type Meeting, type Person, type ScoredTopic } from '../api'
+import { MeetingEditModal } from '../components/meetingForms'
 import {
+  allocatedMinutes,
   Badge,
   Button,
+  CapacityBar,
   Card,
   EmptyState,
   Field,
   fmtDate,
   fmtDateTime,
   Input,
+  IntentBadge,
   Select,
   Spinner,
   StatusBadge,
@@ -23,12 +27,12 @@ import {
   cn,
 } from '../components/ui'
 
-const intentTone: Record<string, string> = { decide: 'indigo', inform: 'blue', consult: 'violet', shape: 'amber' }
-
 export default function MeetingDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const meetingKey = ['meeting', id]
+  const [editing, setEditing] = useState(false)
 
   const { data: meeting } = useQuery({
     queryKey: meetingKey,
@@ -44,6 +48,7 @@ export default function MeetingDetail() {
     queryClient.invalidateQueries({ queryKey: ['candidates', id] })
     queryClient.invalidateQueries({ queryKey: ['meetings'] })
     queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    queryClient.invalidateQueries({ queryKey: ['rolling-agenda'] })
   }
 
   const patchMeeting = useMutation({
@@ -71,7 +76,7 @@ export default function MeetingDetail() {
 
   if (!meeting) return <Spinner />
 
-  const allocated = meeting.agenda_items.reduce((sum, item) => sum + item.allocated_minutes, 0)
+  const allocated = allocatedMinutes(meeting.agenda_items)
   const capacity = meeting.forum.capacity_minutes
   const over = allocated > capacity
 
@@ -96,7 +101,17 @@ export default function MeetingDetail() {
               {meeting.forum.name}
               {meeting.needs_review && <Badge tone="amber">diary moved — check time</Badge>}
             </h1>
-            <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{fmtDateTime(meeting.scheduled_at)}</p>
+            <p className="mt-0.5 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+              {fmtDateTime(meeting.scheduled_at)}
+              {meeting.diary_event_id && (
+                <Link
+                  to={`/diary?event=${encodeURIComponent(meeting.diary_event_id)}`}
+                  className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                >
+                  In diary →
+                </Link>
+              )}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             {meeting.needs_review && (
@@ -115,6 +130,9 @@ export default function MeetingDetail() {
                 </option>
               ))}
             </Select>
+            <Button variant="secondary" onClick={() => setEditing(true)}>
+              <Pencil size={15} /> Edit
+            </Button>
             <Button variant="secondary" onClick={() => window.print()}>
               <Printer size={15} /> Print agenda
             </Button>
@@ -131,12 +149,7 @@ export default function MeetingDetail() {
                 </span>
               }
             >
-              <div className="mb-3 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                <div
-                  className={cn('h-full rounded-full transition-all', over ? 'bg-rose-500' : 'bg-indigo-500')}
-                  style={{ width: `${Math.min(100, (allocated / capacity) * 100)}%` }}
-                />
-              </div>
+              <CapacityBar allocated={allocated} capacity={capacity} className="mb-3" />
               {meeting.agenda_items.length === 0 ? (
                 <EmptyState title="Empty agenda" hint="Add topics from the ranked candidates — Fulcrum has already scored what most deserves the time." />
               ) : (
@@ -175,7 +188,7 @@ export default function MeetingDetail() {
                         <div className="min-w-0">
                           <div className="text-[13px] leading-snug font-medium">{topic.title}</div>
                           <div className="mt-1 flex flex-wrap items-center gap-1">
-                            <Badge tone={intentTone[topic.intent]}>{topic.intent}</Badge>
+                            <IntentBadge intent={topic.intent} />
                             <Badge tone="slate">{topic.duration_minutes}m</Badge>
                             {topic.recurring && <Badge tone="amber">standing</Badge>}
                             {topic.sponsor && <Badge tone="slate">{topic.sponsor.name}</Badge>}
@@ -246,6 +259,14 @@ export default function MeetingDetail() {
           Total {allocated} of {capacity} minutes · prepared with Fulcrum
         </p>
       </div>
+
+      {editing && (
+        <MeetingEditModal
+          meeting={meeting}
+          onClose={() => setEditing(false)}
+          onDeleted={() => navigate('/meetings')}
+        />
+      )}
     </div>
   )
 }
@@ -283,7 +304,7 @@ function SortableAgendaRow({
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13px] font-medium">{item.topic.title}</div>
           <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-            <Badge tone={intentTone[item.topic.intent]}>{item.topic.intent}</Badge>
+            <IntentBadge intent={item.topic.intent} />
             {item.topic.recurring && <Badge tone="amber">standing</Badge>}
             {item.topic.sponsor && <span>{item.topic.sponsor.name}</span>}
           </div>

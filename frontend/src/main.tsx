@@ -11,6 +11,7 @@ import Topics from './pages/Topics'
 import Meetings from './pages/Meetings'
 import MeetingDetail from './pages/MeetingDetail'
 import Planner from './pages/Planner'
+import RollingAgenda from './pages/RollingAgenda'
 import Diary from './pages/Diary'
 import Mailbox from './pages/Mailbox'
 import People from './pages/People'
@@ -31,6 +32,7 @@ const router = createBrowserRouter([
       { path: '/topics', element: <Topics /> },
       { path: '/meetings', element: <Meetings /> },
       { path: '/meetings/:id', element: <MeetingDetail /> },
+      { path: '/forums/:id/agenda', element: <RollingAgenda /> },
       { path: '/planner', element: <Planner /> },
       { path: '/diary', element: <Diary /> },
       { path: '/mailbox', element: <Mailbox /> },

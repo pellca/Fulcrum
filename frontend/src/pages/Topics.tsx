@@ -15,6 +15,7 @@ import {
   Field,
   fmtDate,
   Input,
+  IntentBadge,
   Modal,
   PageHeader,
   Select,
@@ -26,8 +27,6 @@ import { Drawer, LinkPanel, Section } from '../components/panels'
 
 const INTENTS = ['decide', 'inform', 'consult', 'shape']
 const TOPIC_STATUSES = ['proposed', 'scheduled', 'discussed', 'parked']
-
-const intentTone: Record<string, string> = { decide: 'indigo', inform: 'blue', consult: 'violet', shape: 'amber' }
 
 export default function Topics() {
   const [status, setStatus] = useState('')
@@ -121,7 +120,7 @@ export default function Topics() {
                 <StatusBadge status={topic.status} />
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
-                <Badge tone={intentTone[topic.intent]}>{topic.intent}</Badge>
+                <IntentBadge intent={topic.intent} />
                 <Badge tone={topic.readiness === 'ready' ? 'green' : 'slate'}>{topic.readiness}</Badge>
                 <Badge tone="slate">{topic.duration_minutes} min</Badge>
                 {topic.recurring && <Badge tone="amber">recurring</Badge>}

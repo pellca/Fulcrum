@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import { CalendarPlus, Landmark, Plus } from 'lucide-react'
-import { api, type Forum, type Meeting, type Person } from '../api'
+import { CalendarPlus, LayoutGrid, Landmark, Pencil, Plus } from 'lucide-react'
+import { api, type Forum, type Meeting } from '../api'
+import { ForumFormModal, MeetingEditModal } from '../components/meetingForms'
 import {
+  allocatedMinutes,
   Badge,
   Button,
   Card,
@@ -14,22 +16,22 @@ import {
   Input,
   Modal,
   PageHeader,
-  Select,
   Spinner,
   StatusBadge,
 } from '../components/ui'
 
 export default function Meetings() {
   const [showPast, setShowPast] = useState(false)
-  const [creatingForum, setCreatingForum] = useState(false)
+  // undefined = closed, null = create mode, Forum = edit mode
+  const [formingForum, setFormingForum] = useState<Forum | null | undefined>(undefined)
   const [schedulingFor, setSchedulingFor] = useState<Forum | null>(null)
+  const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null)
 
   const { data: forums, isLoading: loadingForums } = useQuery({ queryKey: ['forums'], queryFn: () => api.get<Forum[]>('/forums') })
   const { data: meetings, isLoading: loadingMeetings } = useQuery({
     queryKey: ['meetings', showPast],
     queryFn: () => api.get<Meeting[]>(`/meetings${showPast ? '' : '?upcoming_only=true'}`),
   })
-  const { data: people = [] } = useQuery({ queryKey: ['people'], queryFn: () => api.get<Person[]>('/people') })
 
   if (loadingForums || loadingMeetings) return <Spinner />
 
@@ -39,7 +41,7 @@ export default function Meetings() {
         title="Meetings"
         subtitle="Your governance forums and their agenda pipeline"
         actions={
-          <Button variant="secondary" onClick={() => setCreatingForum(true)}>
+          <Button variant="secondary" onClick={() => setFormingForum(null)}>
             <Plus size={15} /> New forum
           </Button>
         }
@@ -59,9 +61,19 @@ export default function Meetings() {
                   </div>
                 </div>
               </div>
-              <Button size="sm" variant="ghost" onClick={() => setSchedulingFor(forum)} title="Schedule a meeting">
-                <CalendarPlus size={15} />
-              </Button>
+              <div className="flex shrink-0 items-center gap-1">
+                <Link to={`/forums/${forum.id}/agenda`}>
+                  <Button size="sm" variant="ghost" title="Agenda board">
+                    <LayoutGrid size={15} />
+                  </Button>
+                </Link>
+                <Button size="sm" variant="ghost" onClick={() => setFormingForum(forum)} title="Edit forum">
+                  <Pencil size={15} />
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setSchedulingFor(forum)} title="Schedule a meeting">
+                  <CalendarPlus size={15} />
+                </Button>
+              </div>
             </div>
           </Card>
         ))}
@@ -88,7 +100,7 @@ export default function Meetings() {
       ) : (
         <div className="space-y-2">
           {meetings.map((meeting) => {
-            const allocated = meeting.agenda_items.reduce((sum, item) => sum + item.allocated_minutes, 0)
+            const allocated = allocatedMinutes(meeting.agenda_items)
             return (
               <Link
                 key={meeting.id}
@@ -109,6 +121,17 @@ export default function Meetings() {
                     {meeting.agenda_items.length} items · {allocated}/{meeting.forum.capacity_minutes} min
                   </span>
                   <StatusBadge status={meeting.status} />
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setEditingMeeting(meeting)
+                    }}
+                    className="rounded-md p-1 text-slate-300 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+                    title="Edit meeting"
+                  >
+                    <Pencil size={13} />
+                  </button>
                 </div>
               </Link>
             )
@@ -116,77 +139,16 @@ export default function Meetings() {
         </div>
       )}
 
-      <CreateForumModal open={creatingForum} onClose={() => setCreatingForum(false)} people={people} />
+      {formingForum !== undefined && <ForumFormModal forum={formingForum} onClose={() => setFormingForum(undefined)} />}
       {schedulingFor && <ScheduleModal forum={schedulingFor} onClose={() => setSchedulingFor(null)} />}
+      {editingMeeting && (
+        <MeetingEditModal
+          meeting={editingMeeting}
+          onClose={() => setEditingMeeting(null)}
+          onDeleted={() => setEditingMeeting(null)}
+        />
+      )}
     </div>
-  )
-}
-
-function CreateForumModal({ open, onClose, people }: { open: boolean; onClose: () => void; people: Person[] }) {
-  const queryClient = useQueryClient()
-  const [form, setForm] = useState<Record<string, string>>({})
-  const set = (key: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setForm((f) => ({ ...f, [key]: e.target.value }))
-
-  const create = useMutation({
-    mutationFn: () =>
-      api.post('/forums', {
-        name: form.name,
-        chair_id: form.chair_id ? Number(form.chair_id) : null,
-        cadence: form.cadence || null,
-        capacity_minutes: Number(form.capacity_minutes) || 60,
-        audience: form.audience || null,
-        colour: form.colour || '#0ea5e9',
-      }),
-    onSuccess: () => {
-      toast.success('Forum created')
-      setForm({})
-      onClose()
-      queryClient.invalidateQueries({ queryKey: ['forums'] })
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  return (
-    <Modal open={open} onClose={onClose} title="New forum">
-      <div className="space-y-3">
-        <Field label="Name">
-          <Input value={form.name ?? ''} onChange={set('name')} autoFocus placeholder="e.g. AET Weekly" />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Chair">
-            <Select value={form.chair_id ?? ''} onChange={set('chair_id')}>
-              <option value="">None</option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Agenda capacity (min)">
-            <Input type="number" value={form.capacity_minutes ?? '60'} onChange={set('capacity_minutes')} />
-          </Field>
-          <Field label="Cadence">
-            <Input value={form.cadence ?? ''} onChange={set('cadence')} placeholder="Weekly, Mondays 10:00" />
-          </Field>
-          <Field label="Colour">
-            <Input type="color" value={form.colour ?? '#0ea5e9'} onChange={set('colour')} className="!h-9 !p-1" />
-          </Field>
-        </div>
-        <Field label="Audience">
-          <Input value={form.audience ?? ''} onChange={set('audience')} placeholder="Who attends?" />
-        </Field>
-        <div className="flex justify-end gap-2 pt-1">
-          <Button variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button disabled={!form.name} onClick={() => create.mutate()}>
-            Create
-          </Button>
-        </div>
-      </div>
-    </Modal>
   )
 }
 
