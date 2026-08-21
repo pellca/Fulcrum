@@ -95,12 +95,18 @@ malformed content so the HTTP layer can return 422 and the CLI can exit 3.
 - **pywin32 COM datetimes lie about their zone.** They arrive aware with a zero (UTC-labelled)
   offset while the wall-clock fields are already local. Never write `if dt.tzinfo is None` against
   them — re-anchor with `dt.replace(tzinfo=None).astimezone()`.
+- **Both Outlook extractors live in `tools/`** (`diary_extractor`, `mail_extractor`) and are
+  deliberately siblings: they share the same COM patterns, and the timezone bug above existed in
+  *both* copies precisely because the second was written in a separate repo from the first. A fix or
+  a gotcha found in one is a prompt to check the other. Each is a thin COM harvest layer over pure,
+  testable logic — keep that split, because the COM layer cannot be tested off Windows.
 
 ## Testing
 
 - Backend: `cd backend && ../.venv/bin/python -m pytest tests`
-- Extractor: `.venv/bin/python -m pytest tools/mail_extractor/tests` (pure layer, no Outlook needed —
-  the COM layer is deliberately thin so the tested part runs anywhere)
+- Extractors: `.venv/bin/python -m pytest tools/mail_extractor/tests tools/diary_extractor/tests`
+  (pure layers, no Outlook needed — the COM layer in each is deliberately thin so the tested part
+  runs anywhere)
 - Frontend: `cd frontend && npm run build && npm run lint`
 
 Tests must never touch `data/fulcrum.db` — `conftest.py` points `FULCRUM_DB` at a temp file, and any

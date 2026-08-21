@@ -16,7 +16,7 @@ Internal Audit & Investigations function.
 | **Meetings** | Forums (recurring governance meetings with a time budget) → meeting instances → **agenda builder** that *ranks* candidate topics with a transparent score and packs them into the capacity, drag-to-reorder, printable agenda, post-meeting decision capture that spawns follow-up actions. Forums and meetings are editable and deletable, with a preflight that names what a delete takes with it. Per forum, a **rolling agenda** shows the next N meetings side by side — the forward view, printable |
 | **Planner** | Timeline of every moving part per workstream, hard external deadlines, dependency edges (`blocks` / `precedes`) and **risk chains** — anything downstream of a late/blocked/at-risk item is flagged |
 | **Mailbox** | Last 1–5 days of Inbox + Sent Items as a **triage queue**: per email, ranked suggestions of the actions/commitments it probably concerns, then one keystroke to log a chase, spawn an action, close one with the email as evidence, write a People Note, or dismiss. Linked emails are kept forever and are clickable from the record they're attached to |
-| **Diary** | Imports `diary.json` from the [Outlook Diary Extractor](../OutlookDiaryExtractor); detects rescheduled meetings (cancel + re-create pairs), auto-moves linked meetings, and reconciles attendee display names to people via aliases. Suggests which Outlook events match which Fulcrum meetings, **creates a meeting straight from a diary entry**, clicks through both ways, and prunes old events by date range |
+| **Diary** | Imports `diary.json` from the [Outlook diary extractor](tools/diary_extractor) bundled in this repo; detects rescheduled meetings (cancel + re-create pairs), auto-moves linked meetings, and reconciles attendee display names to people via aliases. Suggests which Outlook events match which Fulcrum meetings, **creates a meeting straight from a diary entry**, clicks through both ways, and prunes old events by date range |
 | **People** | The directory behind every owner field, plus **People Notes** (feedback, call notes, observations) and **1:1 packs** — one click gives you everything a person owns, owes, and hasn't discussed with you yet |
 | **Modules** | Manifest-registered external tools runnable from the browser with live logs — the seam where future agentic capabilities plug in |
 | **Settings** | One-click DB backup, full JSON export, demo-data loader, and scoped clears (demo / diary / mail / everything) |
@@ -36,7 +36,8 @@ Dev mode (hot reload): run `uvicorn app.main:app --reload --port 8742` from `bac
 `npm run dev` in `frontend/` (Vite proxies `/api`).
 
 Tests: `cd backend && ../.venv/bin/python -m pytest tests` (and `.venv/bin/python -m pytest
-tools/mail_extractor/tests` for the extractor's pure layer, which runs anywhere — no Outlook needed).
+tools/mail_extractor/tests tools/diary_extractor/tests` for the extractors' pure layers, which run
+anywhere — no Outlook needed).
 
 ## Corporate laptop deployment
 
@@ -50,12 +51,13 @@ Designed for a locked-down Windows machine with Python + Node but no Docker/admi
 
 ### Feeding it your Outlook diary
 
-The Outlook Diary Extractor runs on the corporate machine against the signed-in desktop Outlook
-(Task Scheduler every 15 min works well) and writes `diary.json`. Then either:
+`tools/diary_extractor/export_diary.py` runs on the corporate machine against the signed-in desktop
+Outlook (Task Scheduler every 15 min works well) and writes `diary.json`. It ships **inside this
+repo**, alongside the mail extractor, so there is nothing extra to clone. Then either:
 
 - **Same machine**: the `outlook-diary-extractor` module on the Modules page runs the extractor and
-  ingests the output automatically (edit `modules/registry/outlook-diary-extractor.json` to point
-  `cwd` at your extractor checkout and set your mailbox), or
+  ingests the output automatically (edit `modules/registry/outlook-diary-extractor.json` to set your
+  mailbox, and `cwd` if your checkout isn't at `C:\Dev\CoS`), or
 - **Different machine**: transfer `diary.json` and use **Import diary.json** on the Diary page
   (or the `diary-import` module) — or, if browser uploads are DLP-inspected on that machine, skip
   the browser entirely with `python import_data.py diary` (see "Scripted imports" below).
@@ -175,6 +177,7 @@ backend/app/
                        CSV import, register export, seed, cli_import (shared scripted-import harness)
   modules/runner.py    manifest registry + subprocess runner
 frontend/              React 19 + Vite + Tailwind 4 (TypeScript), TanStack Query, FullCalendar, dnd-kit
+tools/diary_extractor/ Outlook COM calendar export (Windows) — writes diary.json
 tools/mail_extractor/  Outlook COM mail export (Windows) over a pure, tested normalisation layer
 modules/registry/      module manifests
 data/                  fulcrum.db + import inbox (gitignored)

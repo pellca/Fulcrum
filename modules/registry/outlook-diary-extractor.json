@@ -4,10 +4,10 @@
   "description": "Pull the delegate mailbox calendar from the running desktop Outlook into diary.json, then ingest it. Requires Windows with Outlook signed in.",
   "platform": "windows",
   "command": ["python", "export_diary.py", "--mailbox", "{mailbox}", "--out-file", "{out_file}"],
-  "cwd": "C:/Dev/OutlookDiaryExtractor",
+  "cwd": "C:/Dev/CoS/tools/diary_extractor",
   "args": [
     { "name": "mailbox", "label": "Delegate mailbox address", "required": true, "default": "" },
-    { "name": "out_file", "label": "Output diary.json path", "required": true, "default": "C:/diary/diary.json" }
+    { "name": "out_file", "label": "Output diary.json path", "required": true, "default": "C:/Dev/CoS/data/imports/diary.json" }
   ],
   "artifact": "{out_file}",
   "ingest": "diary"

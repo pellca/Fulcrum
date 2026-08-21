@@ -4,8 +4,8 @@ Exports the last N days of Outlook **Inbox + Sent Items** to a `mailbox.json`
 file for the Fulcrum backend to import, using **desktop Outlook COM
 automation** (Microsoft Graph is blocked on the target machine).
 
-Standalone sibling to `/home/cp/Dev/OutlookDiaryExtractor` (the calendar
-extractor) — same rationale, same COM-attach pattern, same
+Sibling to `../diary_extractor` (the calendar extractor) — same rationale,
+same COM-attach pattern, same
 pure-logic/COM-layer split, but produces mail, not calendar events, and
 rewrites its full window on every run rather than doing an incremental merge
 (the Fulcrum importer upserts idempotently by `id`, so there is no need for a
@@ -227,7 +227,8 @@ strips the bogus offset to give a naive datetime holding the (correct) local
 wall clock, then `.astimezone()` interprets that naive value as local time
 and attaches the right offset **for that specific date**, so DST is
 resolved per-date rather than inherited from whatever offset COM handed us.
-Mirrors `OutlookDiaryExtractor/export_diary.py`'s `_ensure_aware`.
+Mirrors `../diary_extractor/export_diary.py`'s `_ensure_aware` — the same bug
+lived in both copies, so treat a fix in one as a prompt to check the other.
 
 ---
 

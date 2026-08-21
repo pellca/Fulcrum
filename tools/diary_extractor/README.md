@@ -1,5 +1,11 @@
 # Outlook Diary Extractor
 
+> Bundled into Fulcrum at `tools/diary_extractor/` (it previously lived in its own
+> repo, `pellca/OutlookDiaryExtractor`, which is now archived in favour of this
+> copy). It sits beside `../mail_extractor`, its sibling for mail — the two share
+> the same COM-attach pattern and the same pure-logic/COM-layer split, so a fix or
+> a gotcha in one is worth checking against the other.
+
 Extracts a delegate mailbox's Outlook calendar to a JSON file for a downstream
 AI "Diary Assistant", using **desktop Outlook COM automation** (Graph is blocked,
 EWS is being retired). Recurring meetings are expanded to one entry per
@@ -131,7 +137,7 @@ Create a task that runs while the user is logged on (Outlook must be running):
 - **Add arguments:**
 
   ```
-  "C:\Tools\OutlookDiaryExtractor\export_diary.py" --mailbox "delegate.name@yourorg.com" --days-ahead 60 --out-file "C:\Tools\OutlookDiaryExtractor\diary.json"
+  "C:\Dev\CoS\tools\diary_extractor\export_diary.py" --mailbox "delegate.name@yourorg.com" --days-ahead 60 --out-file "C:\Dev\CoS\data\imports\diary.json"
   ```
 
 - **Trigger:** e.g. every 15 minutes.
@@ -140,7 +146,7 @@ Create a task that runs while the user is logged on (Outlook must be running):
 Or register from a prompt:
 
 ```bat
-schtasks /Create /TN "OutlookDiary" /SC MINUTE /MO 15 /TR "python.exe \"C:\Tools\OutlookDiaryExtractor\export_diary.py\" --mailbox \"delegate.name@yourorg.com\" --days-ahead 60" /RL LIMITED /F
+schtasks /Create /TN "OutlookDiary" /SC MINUTE /MO 15 /TR "python.exe \"C:\Dev\CoS\tools\diary_extractor\export_diary.py\" --mailbox \"delegate.name@yourorg.com\" --days-ahead 60 --out-file \"C:\Dev\CoS\data\imports\diary.json\"" /RL LIMITED /F
 ```
 
 Each run does a small, bounded COM query and an incremental merge, so it stays
