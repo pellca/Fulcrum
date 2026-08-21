@@ -26,7 +26,7 @@ import os
 import sys
 import time
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 # Make export_diary / diary_merge importable when run from anywhere.
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -118,3 +118,51 @@ class EnsureAwareLondonPinnedTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OutOfRangeDateTests(unittest.TestCase):
+    """Outlook hands out sentinel dates that Windows cannot localise.
+
+    4501-01-01 is Outlook's "no end date" on an endless recurring series and
+    1601-01-01 is FILETIME zero. A naive .astimezone() routes through the
+    platform's local time conversion, which on Windows raises
+    OSError [Errno 22] outside roughly 1970..3000 -- aborting the whole
+    export over one junk date. glibc happily converts them, so this cannot be
+    reproduced by simply passing the date on Linux: the failure is simulated
+    with a datetime subclass whose astimezone() raises exactly as Windows does.
+    """
+
+    class _WindowsOutOfRange(datetime):
+        """A datetime whose .astimezone() fails the way Windows' does.
+
+        datetime.replace() returns type(self), so the naive value produced
+        inside _ensure_aware is still one of these and still raises.
+        """
+
+        def astimezone(self, tz=None):
+            raise OSError(22, "Invalid argument")
+
+    def test_out_of_range_date_does_not_abort_the_run(self):
+        sentinel = self._WindowsOutOfRange(4501, 1, 1, 0, 0)
+        result = export_diary._ensure_aware(sentinel)
+        self.assertIsNotNone(result.utcoffset(), "must come back aware")
+        self.assertEqual(
+            result.replace(tzinfo=None),
+            datetime(4501, 1, 1, 0, 0),
+            "wall clock must be preserved",
+        )
+
+    def test_filetime_epoch_does_not_abort_the_run(self):
+        result = export_diary._ensure_aware(self._WindowsOutOfRange(1601, 1, 1, 0, 0))
+        self.assertIsNotNone(result.utcoffset())
+
+    def test_in_range_dates_are_unaffected_by_the_guard(self):
+        # the guard must not change the normal path: a real July date still
+        # gets this machine's actual offset for that date
+        normal = datetime(2026, 7, 6, 14, 0, tzinfo=timezone.utc)
+        result = export_diary._ensure_aware(normal)
+        self.assertEqual(result.replace(tzinfo=None), datetime(2026, 7, 6, 14, 0))
+        self.assertEqual(result.utcoffset(), datetime(2026, 7, 6, 14, 0).astimezone().utcoffset())
+
+    def test_local_utcoffset_now_returns_a_timedelta(self):
+        self.assertIsInstance(export_diary._local_utcoffset_now(), timedelta)

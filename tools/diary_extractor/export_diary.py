@@ -22,7 +22,7 @@ import os
 import sys
 import time
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import diary_merge
 
@@ -204,8 +204,28 @@ def _ensure_aware(dt):
     for a naive input interprets it as local time and attaches the right
     offset for that specific date -- so DST is resolved per-date rather than
     inherited from whatever (wrong) offset COM handed us.
+
+    OUT-OF-RANGE DATES: naive .astimezone() goes through the platform's local
+    time conversion, and on Windows that raises OSError [Errno 22] for values
+    outside roughly 1970..3000. Outlook hands out exactly such sentinels --
+    4501-01-01 for "no end date" on an endless recurring series, 1601-01-01
+    (FILETIME zero) on stubs -- so this is reachable on a real mailbox and
+    would otherwise abort the whole export. Those dates carry no real instant,
+    so the fallback stamps them with today's offset and moves on.
     """
-    return dt.replace(tzinfo=None).astimezone()
+    naive = dt.replace(tzinfo=None)
+    try:
+        return naive.astimezone()
+    except (OSError, OverflowError, ValueError):
+        return naive.replace(tzinfo=timezone(_local_utcoffset_now()))
+
+
+def _local_utcoffset_now():
+    """Today's local UTC offset, or UTC if even that cannot be determined."""
+    try:
+        return datetime.now().astimezone().utcoffset() or timedelta(0)
+    except Exception:  # noqa: BLE001 - a broken TZ database must not abort a run
+        return timedelta(0)
 
 
 def _attach_to_outlook():

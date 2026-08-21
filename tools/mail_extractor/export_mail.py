@@ -24,7 +24,7 @@ import json
 import os
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import mail_normalize
 
@@ -95,7 +95,23 @@ def _ensure_aware(dt):
     """
     if dt is None:
         return None
-    return dt.replace(tzinfo=None).astimezone()
+    naive = dt.replace(tzinfo=None)
+    try:
+        return naive.astimezone()
+    except (OSError, OverflowError, ValueError):
+        # Naive .astimezone() uses the platform's local time conversion, which
+        # on Windows raises OSError [Errno 22] outside roughly 1970..3000.
+        # Outlook sentinels (4501-01-01, 1601-01-01) land there, and one such
+        # item must never abort the run. Same guard as the diary extractor's.
+        return naive.replace(tzinfo=timezone(_local_utcoffset_now()))
+
+
+def _local_utcoffset_now():
+    """Today's local UTC offset, or UTC if even that cannot be determined."""
+    try:
+        return datetime.now().astimezone().utcoffset() or timedelta(0)
+    except Exception:  # noqa: BLE001 - a broken TZ database must not abort a run
+        return timedelta(0)
 
 
 def _attach_to_outlook():

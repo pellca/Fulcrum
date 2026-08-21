@@ -120,3 +120,31 @@ def test_naive_input_wallclock_preserved(london_tz):
     naive = datetime(2026, 7, 6, 14, 0)
     result = export_mail._ensure_aware(naive)
     assert mail_normalize.iso_local_offset(result) == "2026-07-06T14:00:00+01:00"
+
+
+class _WindowsOutOfRange(datetime):
+    """A datetime whose .astimezone() fails the way Windows' does for values
+    outside roughly 1970..3000. datetime.replace() returns type(self), so the
+    naive value produced inside _ensure_aware is still one of these."""
+
+    def astimezone(self, tz=None):
+        raise OSError(22, "Invalid argument")
+
+
+def test_out_of_range_date_does_not_abort_the_run():
+    # Outlook sentinels (4501-01-01 "no date", 1601-01-01 FILETIME zero) cannot
+    # be localised by Windows; one such item must not kill the whole export.
+    result = export_mail._ensure_aware(_WindowsOutOfRange(4501, 1, 1, 0, 0))
+    assert result.utcoffset() is not None
+    assert result.replace(tzinfo=None) == datetime(4501, 1, 1, 0, 0)
+
+
+def test_in_range_dates_are_unaffected_by_the_guard():
+    normal = datetime(2026, 7, 6, 14, 0, tzinfo=timezone.utc)
+    result = export_mail._ensure_aware(normal)
+    assert result.replace(tzinfo=None) == datetime(2026, 7, 6, 14, 0)
+    assert result.utcoffset() == datetime(2026, 7, 6, 14, 0).astimezone().utcoffset()
+
+
+def test_none_still_returns_none():
+    assert export_mail._ensure_aware(None) is None
