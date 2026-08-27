@@ -98,7 +98,8 @@ export interface Workstream extends WorkstreamMini {
   description: string | null
   category: string
   status: string
-  owner: PersonMini | null
+  sort_order: number
+  owners: PersonMini[]
 }
 
 export interface Commitment {
@@ -175,7 +176,7 @@ export interface Topic {
   recurring: boolean
   target_by: string | null
   papers_url: string | null
-  sponsor: PersonMini | null
+  sponsors: PersonMini[]
   workstream: WorkstreamMini | null
   commitment: { id: number; title: string } | null
   created_at: string
@@ -194,7 +195,7 @@ export interface AgendaItem {
     duration_minutes: number
     readiness: string
     recurring: boolean
-    sponsor: PersonMini | null
+    sponsors: PersonMini[]
     workstream: WorkstreamMini | null
   }
 }

@@ -14,7 +14,7 @@ from datetime import date, datetime
 
 from sqlalchemy.orm import Session
 
-from ..models import Action, Commitment, Forum, Link, Meeting, Topic
+from ..models import Action, Commitment, Forum, Link, Meeting, Person, Topic
 from .quickadd import ORIGINS, find_person, find_workstream
 
 INTENTS = {"decide", "inform", "consult", "shape"}
@@ -212,13 +212,28 @@ def preview_import(db: Session, rows: list[list[str]], default_type: str | None 
 
 def commit_import(db: Session, items: list[dict], default_meeting_id: int | None = None) -> dict:
     created = {"actions": 0, "commitments": 0, "topics": 0, "meeting_links": 0}
+    # Topic sponsors are a relationship now, so they need Person rows rather than
+    # an id. Resolve every distinct sponsor once up front — a db.get() per row
+    # would put a query inside the write loop for no reason. Ids come from
+    # find_person, so they always exist; .get() rather than [] keeps a row that
+    # somehow references a deleted person importable, just without a sponsor.
+    sponsor_ids = {
+        item["owner_id"]
+        for item in items
+        if item.get("type") == "topic" and item.get("owner_id")
+    }
+    people = (
+        {p.id: p for p in db.query(Person).filter(Person.id.in_(sponsor_ids)).all()}
+        if sponsor_ids
+        else {}
+    )
     for item in items:
         due = date.fromisoformat(item["due_date"]) if item.get("due_date") else None
         if item.get("type") == "topic":
             row = Topic(
                 title=item["title"],
                 description=item.get("description"),
-                sponsor_id=item.get("owner_id"),
+                sponsors=[p for p in [people.get(item.get("owner_id"))] if p],
                 workstream_id=item.get("workstream_id"),
                 target_by=due,
                 intent=item.get("intent", "inform"),

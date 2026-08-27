@@ -124,7 +124,7 @@ def one_to_one_pack(person_id: int, db: Session = Depends(get_db)):
     )
     topics = (
         db.query(Topic)
-        .filter(Topic.sponsor_id == person_id, Topic.status.in_(["proposed", "parked"]))
+        .filter(Topic.sponsors.any(Person.id == person_id), Topic.status.in_(["proposed", "parked"]))
         .order_by(Topic.target_by.is_(None), Topic.target_by)
         .all()
     )

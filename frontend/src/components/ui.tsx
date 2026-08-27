@@ -144,6 +144,18 @@ export const intentSolid: Record<string, string> = {
   slate: 'bg-slate-400 text-white',
 }
 
+/** Name list for a many-to-many people field. Somewhere like a rolling-agenda
+ *  card there is room for one name, so past `max` it becomes "Priya Shah +2"
+ *  rather than wrapping to three lines or truncating mid-name. */
+export function peopleLabel(
+  people: { name: string }[] | null | undefined,
+  max = Infinity,
+): string {
+  if (!people?.length) return ''
+  if (people.length <= max) return people.map((p) => p.name).join(', ')
+  return `${people.slice(0, max).map((p) => p.name).join(', ')} +${people.length - max}`
+}
+
 export function allocatedMinutes(items: { allocated_minutes: number }[]): number {
   return items.reduce((sum, item) => sum + item.allocated_minutes, 0)
 }
@@ -213,6 +225,112 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
         props.className,
       )}
     />
+  )
+}
+
+/** Two-or-more mutually exclusive views, for when a dropdown would hide the
+ *  fact that there is a choice at all. */
+export function SegmentedControl<T extends string>({
+  value,
+  onChange,
+  options,
+  className,
+}: {
+  value: T
+  onChange: (value: T) => void
+  options: { value: T; label: string; title?: string }[]
+  className?: string
+}) {
+  return (
+    <div
+      role="tablist"
+      className={cn(
+        'inline-flex rounded-lg border border-slate-300 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-800',
+        className,
+      )}
+    >
+      {options.map((option) => (
+        <button
+          key={option.value}
+          role="tab"
+          type="button"
+          aria-selected={option.value === value}
+          title={option.title}
+          onClick={() => onChange(option.value)}
+          className={cn(
+            'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+            option.value === value
+              ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100'
+              : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Pick several from a list — chips for what is chosen, a select of what is left.
+ *  A plain <select multiple> is unreadable past a handful of options and gives no
+ *  hint that ctrl-click is required, which is why this exists instead. */
+export function MultiSelect({
+  value,
+  onChange,
+  options,
+  placeholder = 'Add…',
+  emptyLabel = 'None',
+}: {
+  value: number[]
+  onChange: (value: number[]) => void
+  options: { id: number; name: string }[]
+  placeholder?: string
+  emptyLabel?: string
+}) {
+  const chosen = value
+    .map((id) => options.find((option) => option.id === id))
+    .filter((option): option is { id: number; name: string } => Boolean(option))
+  const remaining = options.filter((option) => !value.includes(option.id))
+
+  return (
+    <div className="rounded-lg border border-slate-300 bg-white p-1.5 dark:border-slate-700 dark:bg-slate-900">
+      <div className="flex flex-wrap items-center gap-1">
+        {chosen.length === 0 ? (
+          <span className="px-1 text-xs text-slate-400">{emptyLabel}</span>
+        ) : (
+          chosen.map((option) => (
+            <span
+              key={option.id}
+              className="inline-flex items-center gap-1 rounded-full bg-slate-100 py-0.5 pr-1 pl-2 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            >
+              {option.name}
+              <button
+                type="button"
+                aria-label={`Remove ${option.name}`}
+                onClick={() => onChange(value.filter((id) => id !== option.id))}
+                className="rounded-full p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+              >
+                <X size={11} />
+              </button>
+            </span>
+          ))
+        )}
+      </div>
+      {remaining.length > 0 && (
+        <select
+          value=""
+          onChange={(e) => e.target.value && onChange([...value, Number(e.target.value)])}
+          className="mt-1 w-full rounded-md border-0 bg-transparent px-1 py-1 text-xs text-slate-500 focus:outline-none dark:text-slate-400"
+        >
+          <option value="">{placeholder}</option>
+          {remaining.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.name}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
   )
 }
 

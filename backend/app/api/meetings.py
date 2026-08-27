@@ -26,7 +26,7 @@ from ..schemas import (
     TopicPatch,
 )
 from ..services.agenda_scoring import rank_candidates
-from ..services.bulk import delete_entities
+from ..services.bulk import delete_entities, resolve_people
 
 router = APIRouter(tags=["meetings"])
 
@@ -90,8 +90,8 @@ def rolling_agenda(
          meetings, in one batch
       4. `selectinload(AgendaItem.topic)` for the distinct topics referenced,
          in one batch
-      5. `selectinload(Topic.sponsor)` for the distinct sponsors referenced,
-         in one batch
+      5. `selectinload(Topic.sponsors)` for the sponsors of the distinct topics,
+         in one batch (many-to-many, still a single SELECT through the join table)
       6. `selectinload(Topic.workstream)` for the distinct workstreams
          referenced, in one batch
       7. (conditional) one `DiaryEvent.id.in_(...)` batch query (id, location
@@ -109,7 +109,7 @@ def rolling_agenda(
         query.options(
             selectinload(Meeting.agenda_items)
             .selectinload(AgendaItem.topic)
-            .selectinload(Topic.sponsor),
+            .selectinload(Topic.sponsors),
             selectinload(Meeting.agenda_items)
             .selectinload(AgendaItem.topic)
             .selectinload(Topic.workstream),
@@ -190,7 +190,14 @@ def rolling_agenda(
         }
         for band in sorted(
             bands.values(),
-            key=lambda b: (b["workstream"] is None, b["category"] or "", b["label"]),
+            # unassigned last; sort_order is 0 until set by hand, so untouched
+            # data falls back to the category/label order that predates it
+            key=lambda b: (
+                b["workstream"] is None,
+                b["workstream"].sort_order if b["workstream"] else 0,
+                b["category"] or "",
+                b["label"],
+            ),
         )
     ]
 
@@ -333,7 +340,7 @@ def list_topics(
     workstream_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
-    query = db.query(Topic)
+    query = db.query(Topic).options(selectinload(Topic.sponsors))
     if status:
         query = query.filter(Topic.status == status)
     if workstream_id:
@@ -343,7 +350,10 @@ def list_topics(
 
 @router.post("/topics", response_model=TopicOut, status_code=201)
 def create_topic(body: TopicIn, db: Session = Depends(get_db)):
-    topic = Topic(**body.model_dump())
+    data = body.model_dump()
+    sponsors = resolve_people(db, data.pop("sponsor_ids"))
+    topic = Topic(**data)
+    topic.sponsors = sponsors
     db.add(topic)
     db.commit()
     return topic
@@ -355,7 +365,10 @@ def update_topic(topic_id: int, body: TopicPatch, db: Session = Depends(get_db))
     if not topic:
         raise HTTPException(404)
     for key, value in body.model_dump(exclude_unset=True).items():
-        setattr(topic, key, value)
+        if key == "sponsor_ids":
+            topic.sponsors = resolve_people(db, value or [])
+        else:
+            setattr(topic, key, value)
     db.commit()
     return topic
 

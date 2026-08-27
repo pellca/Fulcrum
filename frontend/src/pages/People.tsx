@@ -2,7 +2,10 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AlertTriangle, Check, Download, NotebookTabs, Pencil, Plus, StickyNote, Trash2, X } from 'lucide-react'
+import { DndContext, closestCenter, type DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { AlertTriangle, Check, Download, GripVertical, NotebookTabs, Pencil, Plus, StickyNote, Trash2, X } from 'lucide-react'
 import { PeopleImportButton } from '../components/PeopleImport'
 import { BulkBar, SelectAllHeader, SelectCheckbox, useSelection, type Id } from '../components/BulkSelect'
 import {
@@ -26,7 +29,9 @@ import {
   fmtDate,
   Input,
   Modal,
+  MultiSelect,
   PageHeader,
+  peopleLabel,
   Select,
   Spinner,
   Textarea,
@@ -539,6 +544,7 @@ function PersonModal({ person, onClose }: { person?: Person; onClose: () => void
 function WorkstreamTable() {
   const queryClient = useQueryClient()
   const selection = useSelection()
+  const [editing, setEditing] = useState<number | null>(null)
   const { data: workstreams, isLoading } = useQuery({
     queryKey: ['workstreams', 'all'],
     queryFn: () => api.get<Workstream[]>('/workstreams?include_closed=true'),
@@ -547,53 +553,203 @@ function WorkstreamTable() {
     mutationFn: ({ id, body }: { id: number; body: Record<string, unknown> }) => api.patch(`/workstreams/${id}`, body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workstreams'] }),
   })
+  // The server renumbers to 1..N and returns the new order, so the response is
+  // the source of truth rather than the optimistic arrayMove.
+  const reorder = useMutation({
+    mutationFn: (ids: number[]) => api.post('/workstreams/reorder', { ids }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workstreams'] }),
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const onDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id || !workstreams) return
+    const ids = workstreams.map((ws) => ws.id)
+    reorder.mutate(arrayMove(ids, ids.indexOf(Number(active.id)), ids.indexOf(Number(over.id))))
+  }
 
   if (isLoading) return <Spinner />
   if (!workstreams?.length)
     return <EmptyState title="No workstreams" hint="Audits, investigations, initiatives, governance cycles — the lanes your work runs in." />
 
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-      {workstreams.map((ws) => (
-        <div
-          key={ws.id}
-          className={cn(
-            'rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-900',
-            selection.selected.has(ws.id)
-              ? 'border-indigo-400 dark:border-indigo-600'
-              : 'border-slate-200 dark:border-slate-800',
-          )}
-        >
-          <div className="flex items-center justify-between gap-2">
-            <span className="flex items-center gap-2 text-[13px] font-semibold">
-              <SelectCheckbox
-                checked={selection.selected.has(ws.id)}
-                onChange={() => selection.toggle(ws.id)}
-                label={`Select ${ws.name}`}
+    <>
+      <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+        Drag to set the order — it drives the rolling agenda bands, the planner lanes and every workstream dropdown.
+      </p>
+      <DndContext collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <SortableContext items={workstreams.map((ws) => ws.id)} strategy={rectSortingStrategy}>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {workstreams.map((ws) => (
+              <SortableWorkstreamCard
+                key={ws.id}
+                ws={ws}
+                selected={selection.selected.has(ws.id)}
+                onToggle={() => selection.toggle(ws.id)}
+                onEdit={() => setEditing(ws.id)}
+                onStatus={(status) => patch.mutate({ id: ws.id, body: { status } })}
               />
-              <span className="h-3 w-3 rounded-full" style={{ background: ws.colour }} />
-              {ws.name}
-            </span>
-            <Badge tone={ws.status === 'active' ? 'green' : 'slate'}>{ws.status}</Badge>
+            ))}
           </div>
-          <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-            {ws.category} · {ws.owner?.name ?? 'no owner'}
-          </div>
-          <div className="mt-3 flex gap-1.5">
-            {ws.status === 'active' ? (
-              <Button size="sm" variant="secondary" onClick={() => patch.mutate({ id: ws.id, body: { status: 'closed' } })}>
-                Close
-              </Button>
-            ) : (
-              <Button size="sm" variant="secondary" onClick={() => patch.mutate({ id: ws.id, body: { status: 'active' } })}>
-                Reopen
-              </Button>
-            )}
-          </div>
-        </div>
-      ))}
+        </SortableContext>
+      </DndContext>
       <BulkBar type="workstream" ids={[...selection.selected]} onClear={selection.clear} />
+      {editing && <WorkstreamDrawer key={editing} id={editing} onClose={() => setEditing(null)} />}
+    </>
+  )
+}
+
+function SortableWorkstreamCard({
+  ws,
+  selected,
+  onToggle,
+  onEdit,
+  onStatus,
+}: {
+  ws: Workstream
+  selected: boolean
+  onToggle: () => void
+  onEdit: () => void
+  onStatus: (status: string) => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ws.id })
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        'rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-900',
+        isDragging && 'z-10 opacity-80 shadow-md',
+        selected ? 'border-indigo-400 dark:border-indigo-600' : 'border-slate-200 dark:border-slate-800',
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-2 text-[13px] font-semibold">
+          <button
+            {...attributes}
+            {...listeners}
+            aria-label={`Reorder ${ws.name}`}
+            className="cursor-grab text-slate-300 hover:text-slate-500 active:cursor-grabbing dark:text-slate-600"
+          >
+            <GripVertical size={14} />
+          </button>
+          <SelectCheckbox checked={selected} onChange={onToggle} label={`Select ${ws.name}`} />
+          <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: ws.colour }} />
+          <span className="truncate">{ws.name}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          <span title="Display order">
+            <Badge tone="slate">#{ws.sort_order}</Badge>
+          </span>
+          <Badge tone={ws.status === 'active' ? 'green' : 'slate'}>{ws.status}</Badge>
+        </span>
+      </div>
+      <div className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+        {ws.category} · {peopleLabel(ws.owners) || 'no owner'}
+      </div>
+      <div className="mt-3 flex gap-1.5">
+        <Button size="sm" variant="secondary" onClick={onEdit}>
+          <Pencil size={13} /> Edit
+        </Button>
+        {ws.status === 'active' ? (
+          <Button size="sm" variant="secondary" onClick={() => onStatus('closed')}>
+            Close
+          </Button>
+        ) : (
+          <Button size="sm" variant="secondary" onClick={() => onStatus('active')}>
+            Reopen
+          </Button>
+        )}
+      </div>
     </div>
+  )
+}
+
+function WorkstreamDrawer({ id, onClose }: { id: number; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const { data: workstreams = [] } = useQuery({
+    queryKey: ['workstreams', 'all'],
+    queryFn: () => api.get<Workstream[]>('/workstreams?include_closed=true'),
+  })
+  const { data: people = [] } = useQuery({ queryKey: ['people'], queryFn: () => api.get<Person[]>('/people') })
+  const item = workstreams.find((ws) => ws.id === id)
+
+  const patch = useMutation({
+    mutationFn: (body: Record<string, unknown>) => api.patch(`/workstreams/${id}`, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['workstreams'] }),
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  if (!item) return null
+  return (
+    <Drawer open onClose={onClose} title={item.name}>
+      <Field label="Name">
+        <Input
+          defaultValue={item.name}
+          onBlur={(e) => {
+            const name = e.target.value.trim()
+            if (!name) {
+              e.target.value = item.name // an unnamed workstream is unpickable in every dropdown
+              return
+            }
+            if (name !== item.name) patch.mutate({ name })
+          }}
+        />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Category">
+          <Select value={item.category} onChange={(e) => patch.mutate({ category: e.target.value })}>
+            <option value="audit">audit</option>
+            <option value="investigation">investigation</option>
+            <option value="initiative">initiative</option>
+            <option value="governance">governance</option>
+          </Select>
+        </Field>
+        <Field label="Status">
+          <Select value={item.status} onChange={(e) => patch.mutate({ status: e.target.value })}>
+            <option value="active">active</option>
+            <option value="paused">paused</option>
+            <option value="closed">closed</option>
+          </Select>
+        </Field>
+        <Field label="Colour">
+          <Input
+            type="color"
+            defaultValue={item.colour}
+            onBlur={(e) => e.target.value !== item.colour && patch.mutate({ colour: e.target.value })}
+            className="!h-9 !p-1"
+          />
+        </Field>
+        <Field label="Order">
+          <Input
+            type="number"
+            min={1}
+            defaultValue={item.sort_order}
+            onBlur={(e) => {
+              const sort_order = Number(e.target.value)
+              if (sort_order && sort_order !== item.sort_order) patch.mutate({ sort_order })
+            }}
+            title="Same number the drag handles set — lower sorts first"
+          />
+        </Field>
+      </div>
+      <Field label="Owners">
+        <MultiSelect
+          value={item.owners.map((o) => o.id)}
+          onChange={(owner_ids) => patch.mutate({ owner_ids })}
+          options={people}
+          emptyLabel="No owner"
+        />
+      </Field>
+      <Field label="Description">
+        <Textarea
+          rows={3}
+          defaultValue={item.description ?? ''}
+          onBlur={(e) => e.target.value !== (item.description ?? '') && patch.mutate({ description: e.target.value || null })}
+        />
+      </Field>
+    </Drawer>
   )
 }
 
@@ -601,16 +757,19 @@ function WorkstreamModal({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient()
   const { data: people = [] } = useQuery({ queryKey: ['people'], queryFn: () => api.get<Person[]>('/people') })
   const [form, setForm] = useState<Record<string, string>>({ colour: '#6366f1', category: 'initiative' })
+  const [ownerIds, setOwnerIds] = useState<number[]>([])
   const set = (key: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }))
 
   const create = useMutation({
     mutationFn: () =>
+      // sort_order omitted on purpose — the server appends, so a new workstream
+      // does not land at the top of everyone's rolling agenda
       api.post('/workstreams', {
         name: form.name,
         category: form.category,
         colour: form.colour,
-        owner_id: form.owner_id ? Number(form.owner_id) : null,
+        owner_ids: ownerIds,
       }),
     onSuccess: () => {
       toast.success('Workstream created')
@@ -635,20 +794,13 @@ function WorkstreamModal({ onClose }: { onClose: () => void }) {
               <option value="governance">governance</option>
             </Select>
           </Field>
-          <Field label="Owner">
-            <Select value={form.owner_id ?? ''} onChange={set('owner_id')}>
-              <option value="">None</option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
           <Field label="Colour">
             <Input type="color" value={form.colour} onChange={set('colour')} className="!h-9 !p-1" />
           </Field>
         </div>
+        <Field label="Owners">
+          <MultiSelect value={ownerIds} onChange={setOwnerIds} options={people} emptyLabel="No owner" />
+        </Field>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>
             Cancel

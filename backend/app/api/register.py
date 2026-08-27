@@ -20,7 +20,7 @@ from ..schemas import (
     CommitmentPatch,
     QuickAddIn,
 )
-from ..services.bulk import delete_entities
+from ..services.bulk import delete_entities, resolve_people
 from ..services.chase import latest_chase_map, next_chase_for
 from ..services.quickadd import parse_quickadd
 from ..services.register_export import build_export
@@ -443,7 +443,7 @@ def quickadd(body: QuickAddIn, db: Session = Depends(get_db)):
 
         item = Topic(
             title=parsed["title"],
-            sponsor_id=parsed["owner_id"],
+            sponsors=resolve_people(db, [parsed["owner_id"]] if parsed["owner_id"] else []),
             workstream_id=parsed["workstream_id"],
             target_by=parsed["due_date"],
         )

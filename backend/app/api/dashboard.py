@@ -70,7 +70,7 @@ def summary(db: Session = Depends(get_db)):
         {
             "id": t.id,
             "title": t.title,
-            "sponsor": t.sponsor.name if t.sponsor else None,
+            "sponsor": ", ".join(p.name for p in t.sponsors) or None,
             "target_by": t.target_by.isoformat() if t.target_by else None,
             "duration_minutes": t.duration_minutes,
         }

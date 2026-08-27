@@ -75,9 +75,15 @@ body {
   }
   /* Chrome strips background fills when printing unless told otherwise; without
      this the intent chips print as blank cells and the grid loses its meaning. */
-  body.print-landscape .agenda-chip {
+  body.print-landscape .agenda-chip,
+  body.print-landscape .agenda-card {
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+  /* a named card must not be split across a page break — half a topic title at
+     the foot of one page is worse than a slightly shorter page */
+  body.print-landscape .agenda-card {
+    break-inside: avoid;
   }
 }
 

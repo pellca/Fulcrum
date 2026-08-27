@@ -102,7 +102,9 @@ class WorkstreamIn(BaseModel):
     category: Literal["audit", "investigation", "initiative", "governance"] = "initiative"
     colour: str = "#6366f1"
     status: Literal["active", "paused", "closed"] = "active"
-    owner_id: Optional[int] = None
+    owner_ids: list[int] = []
+    # omit to append to the end of the order rather than tie for first place
+    sort_order: Optional[int] = None
 
 
 class WorkstreamPatch(BaseModel):
@@ -111,7 +113,12 @@ class WorkstreamPatch(BaseModel):
     category: Optional[Literal["audit", "investigation", "initiative", "governance"]] = None
     colour: Optional[str] = None
     status: Optional[Literal["active", "paused", "closed"]] = None
-    owner_id: Optional[int] = None
+    owner_ids: Optional[list[int]] = None
+    sort_order: Optional[int] = None
+
+
+class WorkstreamReorder(BaseModel):
+    ids: list[int]  # workstream ids in new order; renumbered 1..N
 
 
 class WorkstreamOut(ORMModel):
@@ -121,7 +128,8 @@ class WorkstreamOut(ORMModel):
     category: str
     colour: str
     status: str
-    owner: Optional[PersonMini]
+    sort_order: int
+    owners: list[PersonMini] = []
 
 
 # ---------- register ----------
@@ -316,7 +324,7 @@ class TopicMini(ORMModel):
     duration_minutes: int
     readiness: str
     recurring: bool = False
-    sponsor: Optional[PersonMini]
+    sponsors: list[PersonMini] = []
     workstream: Optional[WorkstreamMini]
 
 
@@ -346,7 +354,7 @@ class TopicIn(BaseModel):
     description: Optional[str] = None
     intent: TopicIntent = "inform"
     duration_minutes: int = 15
-    sponsor_id: Optional[int] = None
+    sponsor_ids: list[int] = []
     workstream_id: Optional[int] = None
     commitment_id: Optional[int] = None
     readiness: Literal["draft", "ready"] = "draft"
@@ -361,7 +369,7 @@ class TopicPatch(BaseModel):
     description: Optional[str] = None
     intent: Optional[TopicIntent] = None
     duration_minutes: Optional[int] = None
-    sponsor_id: Optional[int] = None
+    sponsor_ids: Optional[list[int]] = None
     workstream_id: Optional[int] = None
     commitment_id: Optional[int] = None
     readiness: Optional[Literal["draft", "ready"]] = None
@@ -382,7 +390,7 @@ class TopicOut(ORMModel):
     recurring: bool = False
     target_by: Optional[date]
     papers_url: Optional[str]
-    sponsor: Optional[PersonMini]
+    sponsors: list[PersonMini] = []
     workstream: Optional[WorkstreamMini]
     commitment: Optional[CommitmentMini]
     created_at: datetime
@@ -417,7 +425,7 @@ class RollingTopicOut(ORMModel):
     recurring: bool = False
     target_by: Optional[date]
     papers_url: Optional[str]
-    sponsor: Optional[PersonMini]
+    sponsors: list[PersonMini] = []
 
 
 class RollingCellOut(BaseModel):

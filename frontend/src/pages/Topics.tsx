@@ -17,7 +17,9 @@ import {
   Input,
   IntentBadge,
   Modal,
+  MultiSelect,
   PageHeader,
+  peopleLabel,
   Select,
   Spinner,
   StatusBadge,
@@ -127,7 +129,7 @@ export default function Topics() {
                 {topic.target_by && <Badge tone={dueTone(topic.target_by)}>by {fmtDate(topic.target_by)}</Badge>}
               </div>
               <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                {topic.sponsor?.name ?? 'No sponsor'}
+                {peopleLabel(topic.sponsors) || 'No sponsor'}
                 {topic.workstream ? ` · ${topic.workstream.name}` : ''}
               </div>
             </button>
@@ -167,6 +169,19 @@ function TopicDrawer({ id, onClose, people, workstreams }: { id: number; onClose
   if (!item) return null
   return (
     <Drawer open onClose={onClose} title={item.title}>
+      <Field label="Title">
+        <Input
+          defaultValue={item.title}
+          onBlur={(e) => {
+            const title = e.target.value.trim()
+            if (!title) {
+              e.target.value = item.title // a topic with no name is unfindable
+              return
+            }
+            if (title !== item.title) patch.mutate({ title })
+          }}
+        />
+      </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Intent">
           <Select value={item.intent} onChange={(e) => patch.mutate({ intent: e.target.value })}>
@@ -205,15 +220,13 @@ function TopicDrawer({ id, onClose, people, workstreams }: { id: number; onClose
             <option value="yes">Yes — reusable every meeting</option>
           </Select>
         </Field>
-        <Field label="Sponsor">
-          <Select value={item.sponsor?.id ?? ''} onChange={(e) => patch.mutate({ sponsor_id: e.target.value ? Number(e.target.value) : null })}>
-            <option value="">None</option>
-            {people.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </Select>
+        <Field label="Sponsors">
+          <MultiSelect
+            value={item.sponsors.map((s) => s.id)}
+            onChange={(sponsor_ids) => patch.mutate({ sponsor_ids })}
+            options={people}
+            emptyLabel="No sponsor"
+          />
         </Field>
         <Field label="Target by">
           <Input type="date" value={item.target_by ?? ''} onChange={(e) => patch.mutate({ target_by: e.target.value || null })} />
@@ -266,6 +279,7 @@ function TopicDrawer({ id, onClose, people, workstreams }: { id: number; onClose
 function CreateTopicModal({ open, onClose, people, workstreams }: { open: boolean; onClose: () => void; people: Person[]; workstreams: Workstream[] }) {
   const queryClient = useQueryClient()
   const [form, setForm] = useState<Record<string, string>>({})
+  const [sponsorIds, setSponsorIds] = useState<number[]>([])
   const set = (key: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }))
 
@@ -276,7 +290,7 @@ function CreateTopicModal({ open, onClose, people, workstreams }: { open: boolea
         description: form.description || null,
         intent: form.intent || 'inform',
         duration_minutes: Number(form.duration_minutes) || 15,
-        sponsor_id: form.sponsor_id ? Number(form.sponsor_id) : null,
+        sponsor_ids: sponsorIds,
         workstream_id: form.workstream_id ? Number(form.workstream_id) : null,
         readiness: form.readiness || 'draft',
         target_by: form.target_by || null,
@@ -285,6 +299,7 @@ function CreateTopicModal({ open, onClose, people, workstreams }: { open: boolea
     onSuccess: () => {
       toast.success('Topic created')
       setForm({})
+      setSponsorIds([])
       onClose()
       queryClient.invalidateQueries({ queryKey: ['topics'] })
     },
@@ -311,15 +326,8 @@ function CreateTopicModal({ open, onClose, people, workstreams }: { open: boolea
           <Field label="Duration (min)">
             <Input type="number" value={form.duration_minutes ?? '15'} onChange={set('duration_minutes')} />
           </Field>
-          <Field label="Sponsor">
-            <Select value={form.sponsor_id ?? ''} onChange={set('sponsor_id')}>
-              <option value="">None</option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </Select>
+          <Field label="Sponsors">
+            <MultiSelect value={sponsorIds} onChange={setSponsorIds} options={people} emptyLabel="No sponsor" />
           </Field>
           <Field label="Workstream">
             <Select value={form.workstream_id ?? ''} onChange={set('workstream_id')}>

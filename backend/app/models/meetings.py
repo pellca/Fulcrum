@@ -1,7 +1,18 @@
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db import Base
@@ -49,6 +60,16 @@ class Meeting(Base, TimestampMixin, DemoMixin):
     decisions: Mapped[list["Decision"]] = relationship(back_populates="meeting")
 
 
+# A topic can be sponsored by several people — see workstream_owner in
+# models/core.py for why this shape needs neither is_demo nor a clear scope.
+topic_sponsor = Table(
+    "topic_sponsor",
+    Base.metadata,
+    Column("topic_id", ForeignKey("topic.id", ondelete="CASCADE"), primary_key=True),
+    Column("person_id", ForeignKey("person.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
 class Topic(Base, TimestampMixin, DemoMixin):
     """A discussion item waiting for (or given) forum time."""
 
@@ -60,7 +81,6 @@ class Topic(Base, TimestampMixin, DemoMixin):
     # decide | inform | consult | shape
     intent: Mapped[str] = mapped_column(String(20), default="inform")
     duration_minutes: Mapped[int] = mapped_column(Integer, default=15)
-    sponsor_id: Mapped[Optional[int]] = mapped_column(ForeignKey("person.id", ondelete="SET NULL"))
     workstream_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("workstream.id", ondelete="SET NULL")
     )
@@ -76,7 +96,7 @@ class Topic(Base, TimestampMixin, DemoMixin):
     target_by: Mapped[Optional[date]] = mapped_column(Date)
     papers_url: Mapped[Optional[str]] = mapped_column(String(500))
 
-    sponsor: Mapped[Optional[Person]] = relationship()
+    sponsors: Mapped[list[Person]] = relationship(secondary=topic_sponsor)
     workstream: Mapped[Optional[Workstream]] = relationship()
     commitment: Mapped[Optional[Commitment]] = relationship()
 

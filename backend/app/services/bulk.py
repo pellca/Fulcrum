@@ -4,6 +4,7 @@ The `link` table is polymorphic, so nothing at the database level cleans up edge
 pointing at a deleted row — every delete path goes through here to prune them.
 """
 
+from fastapi import HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -68,6 +69,25 @@ def prune_links(db: Session, entity_type: str, entity_ids: list) -> int:
     return removed or 0
 
 
+def resolve_people(db: Session, person_ids: list[int]) -> list[Person]:
+    """Turn a list of person ids into Person rows for a many-to-many assignment,
+    in the order given. Raises 422 on an unknown id rather than silently dropping
+    it — a sponsor that vanishes on save is worse than a rejected request.
+
+    One query regardless of how many ids, and duplicates in the input collapse
+    (the join tables have a composite primary key, so a repeat would otherwise
+    blow up at flush time).
+    """
+    wanted = list(dict.fromkeys(person_ids))
+    if not wanted:
+        return []
+    found = {p.id: p for p in db.query(Person).filter(Person.id.in_(wanted)).all()}
+    missing = [pid for pid in wanted if pid not in found]
+    if missing:
+        raise HTTPException(422, f"Unknown person id(s): {', '.join(str(m) for m in missing)}")
+    return [found[pid] for pid in wanted]
+
+
 def _person_references(db: Session, person_ids: list[int]) -> list[dict]:
     """What loses its owner if these people go. Ordered most-consequential first."""
     checks = [
@@ -77,10 +97,11 @@ def _person_references(db: Session, person_ids: list[int]) -> list[dict]:
             Commitment.owner_id.in_(person_ids), Commitment.status.notin_(["delivered", "dropped"]))),
         ("closed items owned", db.query(Action).filter(
             Action.owner_id.in_(person_ids), Action.status.in_(["done", "cancelled"]))),
-        ("topics sponsored", db.query(Topic).filter(Topic.sponsor_id.in_(person_ids))),
+        ("topics sponsored", db.query(Topic).filter(Topic.sponsors.any(Person.id.in_(person_ids)))),
         ("forums chaired", db.query(Forum).filter(Forum.chair_id.in_(person_ids))),
         ("decisions owned", db.query(Decision).filter(Decision.owner_id.in_(person_ids))),
-        ("workstreams owned", db.query(Workstream).filter(Workstream.owner_id.in_(person_ids))),
+        ("workstreams owned", db.query(Workstream).filter(
+            Workstream.owners.any(Person.id.in_(person_ids)))),
         ("notes recorded", db.query(PersonNote).filter(PersonNote.person_id.in_(person_ids))),
     ]
     findings = []

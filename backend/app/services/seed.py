@@ -39,10 +39,13 @@ def load_demo(db: Session) -> dict:
     db.flush()
 
     ws = {
-        "credit": Workstream(name="Credit Risk Audit", category="audit", colour="#6366f1", owner_id=people["dir_credit"].id, is_demo=True),
-        "aml": Workstream(name="AML Investigation", category="investigation", colour="#ef4444", owner_id=people["dir_fc"].id, is_demo=True),
-        "method": Workstream(name="Methodology Refresh", category="initiative", colour="#10b981", owner_id=people["bpm1"].id, is_demo=True),
-        "s166": Workstream(name="S166 Response", category="governance", colour="#f59e0b", owner_id=people["dir_ops"].id, is_demo=True),
+        # sort_order drives the rolling agenda band order (and every other workstream
+        # list), so the demo ships an order a chief of staff would actually pick:
+        # the regulator-facing work first, discretionary improvement last.
+        "s166": Workstream(name="S166 Response", category="governance", colour="#f59e0b", sort_order=1, owners=[people["dir_ops"], people["principal"]], is_demo=True),
+        "aml": Workstream(name="AML Investigation", category="investigation", colour="#ef4444", sort_order=2, owners=[people["dir_fc"]], is_demo=True),
+        "credit": Workstream(name="Credit Risk Audit", category="audit", colour="#6366f1", sort_order=3, owners=[people["dir_credit"]], is_demo=True),
+        "method": Workstream(name="Methodology Refresh", category="initiative", colour="#10b981", sort_order=4, owners=[people["bpm1"], people["dir_ops"]], is_demo=True),
     }
     db.add_all(ws.values())
     db.flush()
@@ -152,20 +155,20 @@ def load_demo(db: Session) -> dict:
 
     topics = [
         Topic(title="S166 response: sign off key messages", intent="decide", duration_minutes=20,
-              sponsor_id=people["dir_ops"].id, workstream_id=ws["s166"].id,
+              sponsors=[people["dir_ops"], people["principal"]], workstream_id=ws["s166"].id,
               commitment_id=commitments["s166_draft"].id, readiness="ready",
               target_by=today + timedelta(days=10), is_demo=True),
         Topic(title="Credit scope change: approve approach", intent="decide", duration_minutes=15,
-              sponsor_id=people["dir_credit"].id, workstream_id=ws["credit"].id,
+              sponsors=[people["dir_credit"]], workstream_id=ws["credit"].id,
               commitment_id=commitments["credit_scope"].id, readiness="ready",
               target_by=today + timedelta(days=6), is_demo=True),
         Topic(title="AML investigation: status update", intent="inform", duration_minutes=10,
-              sponsor_id=people["dir_fc"].id, workstream_id=ws["aml"].id, readiness="ready", is_demo=True),
+              sponsors=[people["dir_fc"]], workstream_id=ws["aml"].id, readiness="ready", is_demo=True),
         Topic(title="Methodology pilot: shape success criteria", intent="shape", duration_minutes=25,
-              sponsor_id=people["bpm1"].id, workstream_id=ws["method"].id, readiness="draft",
+              sponsors=[people["bpm1"], people["dir_credit"]], workstream_id=ws["method"].id, readiness="draft",
               target_by=today + timedelta(days=28), is_demo=True),
         Topic(title="2027 audit plan early look", intent="consult", duration_minutes=30,
-              sponsor_id=people["principal"].id, status="parked", is_demo=True),
+              sponsors=[people["principal"]], status="parked", is_demo=True),
     ]
     db.add_all(topics)
     db.flush()

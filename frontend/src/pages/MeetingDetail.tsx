@@ -20,6 +20,7 @@ import {
   fmtDateTime,
   Input,
   IntentBadge,
+  peopleLabel,
   Select,
   Spinner,
   StatusBadge,
@@ -191,7 +192,7 @@ export default function MeetingDetail() {
                             <IntentBadge intent={topic.intent} />
                             <Badge tone="slate">{topic.duration_minutes}m</Badge>
                             {topic.recurring && <Badge tone="amber">standing</Badge>}
-                            {topic.sponsor && <Badge tone="slate">{topic.sponsor.name}</Badge>}
+                            {topic.sponsors.length > 0 && <Badge tone="slate">{peopleLabel(topic.sponsors, 2)}</Badge>}
                             {topic.target_by && <Badge tone="amber">by {fmtDate(topic.target_by)}</Badge>}
                           </div>
                         </div>
@@ -249,7 +250,7 @@ export default function MeetingDetail() {
                 <td className="py-2 pr-3">{index + 1}</td>
                 <td className="py-2 pr-3 font-medium">{item.topic.title}</td>
                 <td className="py-2 pr-3 capitalize">{item.topic.intent}</td>
-                <td className="py-2 pr-3">{item.topic.sponsor?.name ?? '—'}</td>
+                <td className="py-2 pr-3">{peopleLabel(item.topic.sponsors) || '—'}</td>
                 <td className="py-2">{item.allocated_minutes} min</td>
               </tr>
             ))}
@@ -306,7 +307,7 @@ function SortableAgendaRow({
           <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
             <IntentBadge intent={item.topic.intent} />
             {item.topic.recurring && <Badge tone="amber">standing</Badge>}
-            {item.topic.sponsor && <span>{item.topic.sponsor.name}</span>}
+            {item.topic.sponsors.length > 0 && <span>{peopleLabel(item.topic.sponsors, 2)}</span>}
           </div>
         </div>
         <Input

@@ -12,12 +12,12 @@ Internal Audit & Investigations function.
 |---|---|
 | **Today** | Command dashboard: overdue items, chase queue, decision-ready topics, key dates, upcoming meetings with agenda-capacity bars |
 | **Register** | Single register of **commitments** (promises made to the principal / AET / regulators) and **actions** (the work delivering them), with owners, due dates, chase history and re-chase reminders; one-click export to Excel/CSV (with chase history and links) |
-| **Topics** | Discussion items competing for meeting time, with intent (decide / inform / consult / shape), duration and readiness |
-| **Meetings** | Forums (recurring governance meetings with a time budget) → meeting instances → **agenda builder** that *ranks* candidate topics with a transparent score and packs them into the capacity, drag-to-reorder, printable agenda, post-meeting decision capture that spawns follow-up actions. Forums and meetings are editable and deletable, with a preflight that names what a delete takes with it. Per forum, a **rolling agenda** shows the next N meetings side by side — the forward view, printable |
+| **Topics** | Discussion items competing for meeting time, with intent (decide / inform / consult / shape), duration, readiness and one or more sponsors |
+| **Meetings** | Forums (recurring governance meetings with a time budget) → meeting instances → **agenda builder** that *ranks* candidate topics with a transparent score and packs them into the capacity, drag-to-reorder, printable agenda, post-meeting decision capture that spawns follow-up actions. Forums and meetings are editable and deletable, with a preflight that names what a delete takes with it. Per forum, a **rolling agenda** shows the next N meetings side by side — the forward view, printable. One-off topics are named inside their own meeting's column and standing items keep a labelled row of chips across the dates; a Grid / Columns toggle switches back to the all-rows matrix |
 | **Planner** | Timeline of every moving part per workstream, hard external deadlines, dependency edges (`blocks` / `precedes`) and **risk chains** — anything downstream of a late/blocked/at-risk item is flagged |
 | **Mailbox** | Last 1–5 days of Inbox + Sent Items as a **triage queue**: per email, ranked suggestions of the actions/commitments it probably concerns, then one keystroke to log a chase, spawn an action, close one with the email as evidence, write a People Note, or dismiss. Linked emails are kept forever and are clickable from the record they're attached to |
 | **Diary** | Imports `diary.json` from the [Outlook diary extractor](tools/diary_extractor) bundled in this repo; detects rescheduled meetings (cancel + re-create pairs), auto-moves linked meetings, and reconciles attendee display names to people via aliases. Suggests which Outlook events match which Fulcrum meetings, **creates a meeting straight from a diary entry**, clicks through both ways, and prunes old events by date range |
-| **People** | The directory behind every owner field, plus **People Notes** (feedback, call notes, observations) and **1:1 packs** — one click gives you everything a person owns, owes, and hasn't discussed with you yet |
+| **People** | The directory behind every owner field, plus **workstreams** — renamable, recolourable, multi-owner, and drag-orderable, with that one order driving the rolling agenda bands, the planner lanes and every workstream dropdown — plus **People Notes** (feedback, call notes, observations) and **1:1 packs** — one click gives you everything a person owns, owes, and hasn't discussed with you yet |
 | **Modules** | Manifest-registered external tools runnable from the browser with live logs — the seam where future agentic capabilities plug in |
 | **Settings** | One-click DB backup, full JSON export, demo-data loader, and scoped clears (demo / diary / mail / everything) |
 
@@ -108,7 +108,7 @@ python import_data.py people
 | `register` | CSV/XLSX | `register.csv` | actions/commitments/topics — a `type` column decides each row |
 | `actions` | CSV/XLSX | `actions.csv` | same importer as `register`; rows with no `type` column default to action |
 | `commitments` | CSV/XLSX | `commitments.csv` | ...default to commitment |
-| `topics` | CSV/XLSX | `topics.csv` | ...default to topic |
+| `topics` | CSV/XLSX | `topics.csv` | ...default to topic. The template has one owner column, so an imported topic gets a single sponsor — add co-sponsors in the UI or via `sponsor_ids` on the API |
 | `people` | CSV/XLSX | `people.csv` | dedupes against existing people/aliases by name |
 
 | Flag | Effect |
@@ -249,7 +249,7 @@ Everything below attaches through the existing seams (REST API, module registry,
 
 | Feature | What it does | Value | Effort | Cost |
 |---|---|---|---|---|
-| **Rolling agenda (single pane of glass)** ✅ *shipped* | A forum's next N meetings side by side — dates across the top, topics banded by workstream down the side, intent as the cell colour and capacity metered per date. Prints landscape for presenting the forward view at ad-hoc meetings; replaces the hand-built Excel grid. | ★★★ | M | free |
+| **Rolling agenda (single pane of glass)** ✅ *shipped* | A forum's next N meetings side by side — dates across the top, topics banded by workstream (in the order you set) down the side, intent as the cell colour and capacity metered per date. One-off topics are named in their own column so a 12-month window stays readable; standing items keep a labelled row of chips. Prints landscape for presenting the forward view at ad-hoc meetings; replaces the hand-built Excel grid. | ★★★ | M | free |
 | **Rolling agenda: unscheduled backlog column** | A right-hand column of topics not yet on any date, so the forward view shows what is waiting as well as what is placed. Needs a topic↔forum affinity first, otherwise it is a cross-forum dump. | ★★ | M | free |
 | **Move an agenda item between meetings** | A single-transaction `PATCH /agenda-items/{id}` carrying `meeting_id`, so a topic can be dragged from one date to another in the rolling grid. Today's only route is delete + re-add, which is non-atomic and resets the topic's status — hence drag is deliberately out of the rolling view. | ★★ | S–M | free |
 | **Forward agenda planning** | Plan topics across the *next several* instances of a forum; parked items auto-carry; see forum congestion weeks out. | ★★★ | M | free |

@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import Boolean, Date, ForeignKey, String, Text
+from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db import Base
@@ -54,6 +54,18 @@ class PersonNote(Base, TimestampMixin, DemoMixin):
     person: Mapped[Person] = relationship(back_populates="person_notes")
 
 
+# A workstream can be owned by several people. Composite primary key, so the
+# same pairing cannot be inserted twice; ON DELETE CASCADE plus the
+# PRAGMA foreign_keys=ON in db.py means these rows die with either parent —
+# which is why the demo clear scope needs no entry for this table.
+workstream_owner = Table(
+    "workstream_owner",
+    Base.metadata,
+    Column("workstream_id", ForeignKey("workstream.id", ondelete="CASCADE"), primary_key=True),
+    Column("person_id", ForeignKey("person.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
 class Workstream(Base, TimestampMixin, DemoMixin):
     __tablename__ = "workstream"
 
@@ -65,6 +77,8 @@ class Workstream(Base, TimestampMixin, DemoMixin):
     colour: Mapped[str] = mapped_column(String(9), default="#6366f1")
     # active | paused | closed
     status: Mapped[str] = mapped_column(String(20), default="active")
-    owner_id: Mapped[Optional[int]] = mapped_column(ForeignKey("person.id", ondelete="SET NULL"))
+    # display order everywhere workstreams are listed; 0 = never ordered by hand,
+    # which falls back to the category/name ordering that predates this column
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
-    owner: Mapped[Optional[Person]] = relationship()
+    owners: Mapped[list[Person]] = relationship(secondary=workstream_owner)

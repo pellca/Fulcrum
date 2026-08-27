@@ -58,7 +58,10 @@ def timeline(weeks: int = 8, db: Session = Depends(get_db)):
     horizon = today + timedelta(weeks=weeks)
     lanes = []
     workstreams = (
-        db.query(Workstream).filter(Workstream.status == "active").order_by(Workstream.name).all()
+        db.query(Workstream)
+        .filter(Workstream.status == "active")
+        .order_by(Workstream.sort_order, Workstream.category, Workstream.name)
+        .all()
     )
     unassigned = {"workstream": None, "commitments": [], "key_dates": []}
     lane_by_ws: dict[Optional[int], dict] = {None: unassigned}

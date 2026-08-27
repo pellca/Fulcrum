@@ -420,7 +420,7 @@ def test_query_count_is_small_and_constant(client):
                 session,
                 f"Topic {i}",
                 workstream_id=workstreams[i % 3].id,
-                sponsor_id=sponsor.id,
+                sponsors=[sponsor],
             )
             for i in range(6)
         ]
@@ -451,5 +451,7 @@ def test_query_count_is_small_and_constant(client):
 
     # 8 meetings x 6 items = 48 agenda items; a broken N+1 loader would blow this
     # number up proportionally. The real loader chain is: forum, meetings,
-    # agenda_items, topic, sponsor, workstream, (no diary lookup here) -> ~6.
+    # agenda_items, topic, sponsors, workstream, (no diary lookup here) -> ~6.
+    # sponsors is many-to-many now, but selectinload still batches it into one
+    # SELECT through the join table, so the budget is unchanged.
     assert len(statements) <= 10, f"expected a small constant number of queries, got: {statements}"
