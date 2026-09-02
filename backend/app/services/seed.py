@@ -9,6 +9,7 @@ from ..models import (
     Chase,
     Commitment,
     Decision,
+    DiscussionPoint,
     Forum,
     KeyDate,
     Link,
@@ -27,7 +28,8 @@ def load_demo(db: Session) -> dict:
     today = date.today()
 
     people = {
-        "principal": Person(name="Alex Morgan", role="Chief Audit Executive", team="IA&I", is_demo=True),
+        "principal": Person(name="Alex Morgan", role="Chief Audit Executive", team="IA&I",
+                            pin_discussion=True, is_demo=True),
         "bpm1": Person(name="Priya Shah", role="Business Manager", team="IA&I COO", is_bpm=True, is_demo=True),
         "bpm2": Person(name="Tom Okafor", role="Business Manager", team="IA&I COO", is_bpm=True, is_demo=True),
         "dir_credit": Person(name="Sarah Chen", role="Audit Director", team="Credit & Markets", is_demo=True),
@@ -173,6 +175,32 @@ def load_demo(db: Session) -> dict:
     db.add_all(topics)
     db.flush()
 
+    discussion_points = [
+        # linked: shows the one-click "add to discussion list" path from a
+        # register drawer, and exercises link-chip resolution on Today
+        DiscussionPoint(
+            person_id=people["principal"].id,
+            title="Confirm S166 sign-off date with the regulator liaison",
+            priority="high", raised_on=today - timedelta(days=30),
+            last_discussed_on=today - timedelta(days=9), times_discussed=2, is_demo=True,
+        ),
+        # never discussed: a standing item that should float to the top of
+        # the stalest-first ordering ahead of the one above
+        DiscussionPoint(
+            person_id=people["principal"].id,
+            title="Headcount freeze exception for the AML team",
+            detail="Sarah needs two more analysts before the S166 deadline.",
+            priority="high", raised_on=today - timedelta(days=20), is_demo=True,
+        ),
+    ]
+    db.add_all(discussion_points)
+    db.flush()
+
+    db.add(
+        Link(from_type="discussion_point", from_id=discussion_points[0].id,
+             to_type="commitment", to_id=commitments["s166_draft"].id, kind="relates")
+    )
+
     db.add_all([
         Link(from_type="action", from_id=actions["s166_evidence"].id,
              to_type="action", to_id=actions["s166_review"].id, kind="blocks",
@@ -195,5 +223,5 @@ def load_demo(db: Session) -> dict:
     return {
         "people": len(people), "workstreams": len(ws), "key_dates": len(key_dates),
         "commitments": len(commitments), "actions": len(actions), "topics": len(topics),
-        "forums": len(forums), "meetings": len(meetings),
+        "forums": len(forums), "meetings": len(meetings), "discussion_points": len(discussion_points),
     }

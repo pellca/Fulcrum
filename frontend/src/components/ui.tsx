@@ -160,6 +160,25 @@ export function allocatedMinutes(items: { allocated_minutes: number }[]): number
   return items.reduce((sum, item) => sum + item.allocated_minutes, 0)
 }
 
+/** Running clock times for an agenda, in sequence order, from the meeting's
+ *  `scheduled_at`. Pure and client-side: nothing here is persisted, so a
+ *  builder can retime live as items are dragged or their minutes edited,
+ *  and it can never fall out of step with `sequence`. An agenda that
+ *  overruns its capacity just runs past the end time — the capacity bar
+ *  is what flags the overrun, not this helper. */
+export function agendaTimes(
+  startISO: string,
+  items: { allocated_minutes: number }[],
+): { start: string; end: string }[] {
+  const fmt = (d: Date) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  let cursor = new Date(startISO)
+  return items.map((item) => {
+    const start = cursor
+    cursor = new Date(cursor.getTime() + item.allocated_minutes * 60000)
+    return { start: fmt(start), end: fmt(cursor) }
+  })
+}
+
 export function CapacityBar({
   allocated,
   capacity,

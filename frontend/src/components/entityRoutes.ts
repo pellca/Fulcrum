@@ -35,6 +35,9 @@ export function entityRoute(type: string, id: number | string): string | null {
       // resolving a note -> person would need an extra fetch this map
       // deliberately avoids; land on the people list instead
       return '/people'
+    case 'discussion_point':
+      // same limitation as person_note: no person id without an extra fetch
+      return '/people'
     default:
       return null
   }

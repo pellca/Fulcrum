@@ -9,6 +9,7 @@ import { ArrowLeft, GripVertical, Pencil, Plus, Printer, Trash2 } from 'lucide-r
 import { api, type Decision, type Meeting, type Person, type ScoredTopic } from '../api'
 import { MeetingEditModal } from '../components/meetingForms'
 import {
+  agendaTimes,
   allocatedMinutes,
   Badge,
   Button,
@@ -80,6 +81,7 @@ export default function MeetingDetail() {
   const allocated = allocatedMinutes(meeting.agenda_items)
   const capacity = meeting.forum.capacity_minutes
   const over = allocated > capacity
+  const times = agendaTimes(meeting.scheduled_at, meeting.agenda_items)
 
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over: dropTarget } = event
@@ -162,6 +164,7 @@ export default function MeetingDetail() {
                           key={item.id}
                           item={item}
                           index={index}
+                          time={times[index]}
                           held={meeting.status === 'held'}
                           onMinutes={(minutes) => patchItem.mutate({ itemId: item.id, body: { allocated_minutes: minutes } })}
                           onOutcome={(note) => patchItem.mutate({ itemId: item.id, body: { outcome_note: note } })}
@@ -238,16 +241,18 @@ export default function MeetingDetail() {
           <thead>
             <tr className="border-b-2 border-slate-800 text-left">
               <th className="py-1.5 pr-3">#</th>
+              <th className="py-1.5 pr-3">Time</th>
               <th className="py-1.5 pr-3">Item</th>
               <th className="py-1.5 pr-3">Intent</th>
               <th className="py-1.5 pr-3">Sponsor</th>
-              <th className="py-1.5">Time</th>
+              <th className="py-1.5">Duration</th>
             </tr>
           </thead>
           <tbody>
             {meeting.agenda_items.map((item, index) => (
               <tr key={item.id} className="border-b border-slate-300 align-top">
                 <td className="py-2 pr-3">{index + 1}</td>
+                <td className="py-2 pr-3 whitespace-nowrap">{times[index].start}–{times[index].end}</td>
                 <td className="py-2 pr-3 font-medium">{item.topic.title}</td>
                 <td className="py-2 pr-3 capitalize">{item.topic.intent}</td>
                 <td className="py-2 pr-3">{peopleLabel(item.topic.sponsors) || '—'}</td>
@@ -275,6 +280,7 @@ export default function MeetingDetail() {
 function SortableAgendaRow({
   item,
   index,
+  time,
   held,
   onMinutes,
   onOutcome,
@@ -282,6 +288,7 @@ function SortableAgendaRow({
 }: {
   item: Meeting['agenda_items'][number]
   index: number
+  time: { start: string; end: string }
   held: boolean
   onMinutes: (m: number) => void
   onOutcome: (note: string) => void
@@ -301,7 +308,10 @@ function SortableAgendaRow({
         <button {...attributes} {...listeners} className="cursor-grab text-slate-300 hover:text-slate-500 active:cursor-grabbing">
           <GripVertical size={15} />
         </button>
-        <span className="w-5 text-xs font-bold text-slate-400">{index + 1}</span>
+        <div className="flex w-5 flex-col items-center">
+          <span className="text-xs font-bold text-slate-400">{index + 1}</span>
+          <span className="text-[9px] whitespace-nowrap text-slate-400">{time.start}</span>
+        </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13px] font-medium">{item.topic.title}</div>
           <div className="flex items-center gap-1.5 text-[11px] text-slate-500">

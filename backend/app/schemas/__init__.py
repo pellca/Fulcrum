@@ -22,6 +22,7 @@ class PersonIn(BaseModel):
     role: Optional[str] = None
     is_bpm: bool = False
     active: bool = True
+    pin_discussion: bool = False
     notes: Optional[str] = None
 
 
@@ -32,6 +33,7 @@ class PersonPatch(BaseModel):
     role: Optional[str] = None
     is_bpm: Optional[bool] = None
     active: Optional[bool] = None
+    pin_discussion: Optional[bool] = None
     notes: Optional[str] = None
 
 
@@ -52,6 +54,7 @@ class PersonOut(ORMModel):
     role: Optional[str]
     is_bpm: bool
     active: bool
+    pin_discussion: bool
     notes: Optional[str]
     aliases: list[AliasOut] = []
 
@@ -241,6 +244,58 @@ class ChaseIn(BaseModel):
     method: Literal["email", "chat", "meeting"] = "email"
     note: Optional[str] = None
     next_chase_on: Optional[date] = None
+
+
+DiscussionStatus = Literal["open", "closed"]
+
+# Mirrors LINKABLE in frontend/src/components/panels.tsx — the set of entity
+# types the generic link machinery (and TITLE_RESOLVERS) actually knows how to
+# resolve. Anything outside this set would write a Link nothing can display.
+LinkableType = Literal["action", "commitment", "topic", "key_date", "workstream", "discussion_point", "person"]
+
+
+class DiscussionLinkToIn(BaseModel):
+    type: LinkableType
+    id: int
+
+
+class DiscussionPointIn(BaseModel):
+    person_id: int
+    title: str
+    detail: Optional[str] = None
+    priority: Priority = "medium"
+    # lets the one-click "add to discussion list" buttons on the register
+    # drawers create the point and its Link edge in a single request
+    link_to: Optional[DiscussionLinkToIn] = None
+
+
+class DiscussionPointPatch(BaseModel):
+    title: Optional[str] = None
+    detail: Optional[str] = None
+    priority: Optional[Priority] = None
+    status: Optional[DiscussionStatus] = None
+    outcome: Optional[str] = None
+
+
+class DiscussionLinkOut(BaseModel):
+    type: str
+    id: int
+    title: str
+
+
+class DiscussionPointOut(BaseModel):
+    id: int
+    person_id: int
+    title: str
+    detail: Optional[str]
+    priority: str
+    status: str
+    raised_on: date
+    last_discussed_on: Optional[date]
+    times_discussed: int
+    closed_on: Optional[date]
+    outcome: Optional[str]
+    links: list[DiscussionLinkOut] = []
 
 
 class LinkIn(BaseModel):

@@ -9,6 +9,7 @@ from ..models import (
     Commitment,
     Decision,
     DiaryEvent,
+    DiscussionPoint,
     Forum,
     KeyDate,
     Meeting,
@@ -65,6 +66,20 @@ def global_search(q: str, db: Session = Depends(get_db)):
             person.name,
             f"/people/{person.id}/pack",
             meta=" · ".join(filter(None, [person.role, person.team])),
+        )
+
+    for point in (
+        db.query(DiscussionPoint)
+        .filter(or_(ilike(DiscussionPoint.title), ilike(DiscussionPoint.detail)))
+        .limit(PER_TYPE_LIMIT)
+    ):
+        add(
+            "discussion_point",
+            point.id,
+            point.title,
+            f"/people/{point.person_id}/pack",
+            meta=" · ".join(filter(None, [point.status, point.person.name if point.person else None])),
+            snippet=_snippet(point.detail, query),
         )
 
     for action in (

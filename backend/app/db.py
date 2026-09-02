@@ -42,6 +42,7 @@ _COLUMN_MIGRATIONS = [
     ("decision", "review_on", "DATE"),
     ("topic", "recurring", "BOOLEAN DEFAULT 0"),
     ("workstream", "sort_order", "INTEGER DEFAULT 0"),
+    ("person", "pin_discussion", "BOOLEAN DEFAULT 0"),
 ]
 
 # Single-person columns that became many-to-many join tables. The old column is

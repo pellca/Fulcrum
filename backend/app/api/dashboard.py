@@ -1,11 +1,13 @@
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy.orm import Session, selectinload
 
 from ..db import get_db
-from ..models import Action, Commitment, Decision, KeyDate, Meeting, Topic
+from ..models import Action, Commitment, Decision, DiaryEvent, KeyDate, Meeting, Person, Topic
 from ..services.chase import chase_queue
+from ..services.discussion import discussion_list
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -94,30 +96,85 @@ def summary(db: Session = Depends(get_db)):
         .order_by(KeyDate.date)
     ]
 
-    meetings = []
-    for meeting in (
-        db.query(Meeting)
+    # Today's diary, not "meetings happening to have a Fulcrum agenda" — most
+    # of what's actually in the diary was never created as a Meeting, so that
+    # slice was a poor stand-in for "what does today look like". start_date/
+    # start_time are stored as strings (YYYY-MM-DD/HH:MM); compare as strings,
+    # don't parse — start_date is already indexed.
+    #
+    # Anything *spanning* today counts, not just what starts today: a three-day
+    # offsite or a week of leave has to stay on the brief for its whole run,
+    # and matching on start_date alone dropped it after day one. A null
+    # end_date means a single-day event, hence the coalesce.
+    today_str = today.isoformat()
+    diary_events = (
+        db.query(DiaryEvent)
         .filter(
-            Meeting.scheduled_at >= datetime.combine(today, datetime.min.time()),
-            Meeting.scheduled_at <= datetime.combine(today + timedelta(days=14), datetime.max.time()),
-            Meeting.status != "cancelled",
+            DiaryEvent.start_date <= today_str,
+            func.coalesce(DiaryEvent.end_date, DiaryEvent.start_date) >= today_str,
+            DiaryEvent.status == "active",
         )
-        .order_by(Meeting.scheduled_at)
-    ):
+        .order_by(DiaryEvent.is_all_day.desc(), DiaryEvent.start_time)
+        .all()
+    )
+
+    def _span(event: DiaryEvent) -> tuple[int, int]:
+        """(which day of the event today is, how many days it runs) — 1-based,
+        so a single-day entry is (1, 1) and the UI knows to say nothing."""
+        try:
+            start = date.fromisoformat(event.start_date)
+            end = date.fromisoformat(event.end_date or event.start_date)
+        except (TypeError, ValueError):
+            return 1, 1
+        return (today - start).days + 1, (end - start).days + 1
+
+    # Batch-resolve the Fulcrum side in one query — never one per event.
+    event_ids = [e.id for e in diary_events]
+    linked_meetings: dict[str, Meeting] = {}
+    if event_ids:
+        for meeting in (
+            db.query(Meeting)
+            .filter(Meeting.diary_event_id.in_(event_ids))
+            .options(selectinload(Meeting.agenda_items), selectinload(Meeting.forum))
+            .all()
+        ):
+            linked_meetings[meeting.diary_event_id] = meeting
+
+    def _meeting_row(meeting: Meeting | None) -> dict | None:
+        if meeting is None:
+            return None
         allocated = sum(item.allocated_minutes for item in meeting.agenda_items)
-        meetings.append(
-            {
-                "id": meeting.id,
-                "forum": meeting.forum.name,
-                "colour": meeting.forum.colour,
-                "scheduled_at": meeting.scheduled_at.isoformat(),
-                "status": meeting.status,
-                "needs_review": meeting.needs_review,
-                "agenda_count": len(meeting.agenda_items),
-                "allocated_minutes": allocated,
-                "capacity_minutes": meeting.forum.capacity_minutes,
-            }
-        )
+        return {
+            "id": meeting.id,
+            "forum": meeting.forum.name,
+            "colour": meeting.forum.colour,
+            "status": meeting.status,
+            "needs_review": meeting.needs_review,
+            "agenda_count": len(meeting.agenda_items),
+            "allocated_minutes": allocated,
+            "capacity_minutes": meeting.forum.capacity_minutes,
+        }
+
+    diary = [
+        {
+            "id": event.id,
+            "subject": event.subject,
+            "start_time": event.start_time,
+            "end_time": event.end_time,
+            "is_all_day": event.is_all_day,
+            "location": event.location,
+            "organizer": event.organizer,
+            "span_day": _span(event)[0],
+            "span_days": _span(event)[1],
+            "meeting": _meeting_row(linked_meetings.get(event.id)),
+        }
+        for event in diary_events
+    ]
+
+    # One indexed EXISTS, so the dashboard can tell "nothing on today" from
+    # "no diary has ever been imported" without the client making a second
+    # round trip to /admin/stats — which counts every table in the database.
+    diary_imported = db.query(DiaryEvent.id).first() is not None
 
     decisions_for_review = [
         {
@@ -134,8 +191,16 @@ def summary(db: Session = Depends(get_db)):
         .order_by(Decision.review_on)
     ]
 
+    pinned = db.query(Person).filter(Person.pin_discussion.is_(True)).first()
+    discussion = (
+        {"person": {"id": pinned.id, "name": pinned.name}, "points": discussion_list(db, pinned.id)}
+        if pinned
+        else None
+    )
+
     return {
         "today": today.isoformat(),
+        "discussion": discussion,
         "decisions_for_review": decisions_for_review,
         "overdue_actions": overdue_actions,
         "due_soon_actions": due_soon_actions,
@@ -144,5 +209,6 @@ def summary(db: Session = Depends(get_db)):
         "chase_queue": chase_queue(db, today),
         "decision_ready": decision_ready,
         "key_dates": key_dates,
-        "meetings": meetings,
+        "diary": diary,
+        "diary_imported": diary_imported,
     }

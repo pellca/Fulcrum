@@ -18,6 +18,9 @@ class Person(Base, TimestampMixin, DemoMixin):
     role: Mapped[Optional[str]] = mapped_column(String(200))
     is_bpm: Mapped[bool] = mapped_column(Boolean, default=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # whose discussion list pins to the top of Today; at most one person carries
+    # it, enforced by the people PATCH endpoint rather than by the schema
+    pin_discussion: Mapped[bool] = mapped_column(Boolean, default=False)
     notes: Mapped[Optional[str]] = mapped_column(Text)
 
     aliases: Mapped[list["PersonAlias"]] = relationship(

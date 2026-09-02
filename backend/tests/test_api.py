@@ -6,10 +6,11 @@ def test_full_lifecycle(client):
     # dashboard aggregates
     summary = client.get("/api/dashboard/summary").json()
     assert summary["chase_queue"], "seed should produce chases due"
-    assert summary["meetings"], "seed should produce upcoming meetings"
 
     # agenda flow: candidates -> add top candidate -> capacity respected in payload
-    meeting_id = summary["meetings"][0]["id"]
+    meetings = client.get("/api/meetings").json()
+    assert meetings, "seed should produce meetings"
+    meeting_id = meetings[0]["id"]
     candidates = client.get(f"/api/meetings/{meeting_id}/candidates").json()
     assert candidates[0]["score"] >= candidates[-1]["score"]
     top = candidates[0]["topic"]

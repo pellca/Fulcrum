@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Download, Plus } from 'lucide-react'
 import { CopyCopilotPromptButton, ImportCsvButton } from '../components/CsvImport'
 import { BulkBar, SelectAllHeader, SelectCheckbox, useSelection, type Id } from '../components/BulkSelect'
-import { api, registerExportUrl, type Action, type Commitment, type Person, type Workstream } from '../api'
+import { api, createDiscussionPoint, registerExportUrl, type Action, type Commitment, type Person, type Workstream } from '../api'
 import {
   Badge,
   Button,
@@ -308,6 +308,70 @@ function ItemTable({
   )
 }
 
+// The "category" feel the daily-call list needs, without a real category:
+// one click posts the point and its Link edge in a single request. Most
+// items already have an owner, so that's the click; unowned items get a
+// two-step picker instead of guessing whose list to file it under.
+function AddToDiscussionButton({
+  entityType,
+  entityId,
+  title,
+  ownerId,
+  people,
+}: {
+  entityType: 'action' | 'commitment'
+  entityId: number
+  title: string
+  ownerId: number | null
+  people: Person[]
+}) {
+  const [choosing, setChoosing] = useState(false)
+  const [personId, setPersonId] = useState('')
+
+  const add = useMutation({
+    mutationFn: (targetId: number) =>
+      createDiscussionPoint({ person_id: targetId, title, link_to: { type: entityType, id: entityId } }),
+    onSuccess: () => {
+      toast.success('Added to discussion list')
+      setChoosing(false)
+      setPersonId('')
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  if (choosing) {
+    return (
+      <div className="flex items-center gap-2">
+        <Select value={personId} onChange={(e) => setPersonId(e.target.value)} className="!w-40">
+          <option value="">Whose list?</option>
+          {people.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </Select>
+        <Button size="sm" disabled={!personId || add.isPending} onClick={() => add.mutate(Number(personId))}>
+          Add
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setChoosing(false)}>
+          Cancel
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      disabled={add.isPending}
+      onClick={() => (ownerId ? add.mutate(ownerId) : setChoosing(true))}
+    >
+      Add to discussion list
+    </Button>
+  )
+}
+
 function ActionDrawer({ id, onClose, onConverted, people, workstreams }: { id: number; onClose: () => void; onConverted: (id: number) => void; people: Person[]; workstreams: Workstream[] }) {
   const queryClient = useQueryClient()
   const [convertOrigin, setConvertOrigin] = useState('principal')
@@ -412,6 +476,9 @@ function ActionDrawer({ id, onClose, onConverted, people, workstreams }: { id: n
         />
       </Field>
       <ChasePanel kind="action" itemId={id} />
+      <Section title="Discuss">
+        <AddToDiscussionButton entityType="action" entityId={id} title={item.title} ownerId={item.owner?.id ?? null} people={people} />
+      </Section>
       <LinkPanel entityType="action" entityId={id} />
       <Section title="Convert">
         <div className="flex items-end gap-2">
@@ -561,6 +628,9 @@ function CommitmentDrawer({ id, onClose, onConverted, people, workstreams }: { i
         )}
       </Section>
       <ChasePanel kind="commitment" itemId={id} />
+      <Section title="Discuss">
+        <AddToDiscussionButton entityType="commitment" entityId={id} title={item.title} ownerId={item.owner?.id ?? null} people={people} />
+      </Section>
       <LinkPanel entityType="commitment" entityId={id} />
       <Section title="Convert">
         <Button variant="secondary" size="sm" onClick={() => convert.mutate()} disabled={convert.isPending}>

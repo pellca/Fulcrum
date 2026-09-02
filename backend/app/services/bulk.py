@@ -15,6 +15,7 @@ from ..models import (
     Commitment,
     Decision,
     DiaryEvent,
+    DiscussionPoint,
     Forum,
     KeyDate,
     Link,
@@ -36,6 +37,7 @@ DELETABLE = {
     "forum": Forum,
     "meeting": Meeting,
     "diary_event": DiaryEvent,
+    "discussion_point": DiscussionPoint,
 }
 
 LABELS = {
@@ -49,6 +51,7 @@ LABELS = {
     "forum": "forums",
     "meeting": "meetings",
     "diary_event": "diary events",
+    "discussion_point": "discussion points",
 }
 
 
@@ -103,6 +106,8 @@ def _person_references(db: Session, person_ids: list[int]) -> list[dict]:
         ("workstreams owned", db.query(Workstream).filter(
             Workstream.owners.any(Person.id.in_(person_ids)))),
         ("notes recorded", db.query(PersonNote).filter(PersonNote.person_id.in_(person_ids))),
+        ("discussion points", db.query(DiscussionPoint).filter(
+            DiscussionPoint.person_id.in_(person_ids))),
     ]
     findings = []
     for label, query in checks:

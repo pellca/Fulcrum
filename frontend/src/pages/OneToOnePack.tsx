@@ -1,8 +1,9 @@
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, FileDown } from 'lucide-react'
-import { api, markNotesDiscussed, type PersonNoteKind } from '../api'
+import { api, markNotesDiscussed, type DiscussionPoint, type PersonNoteKind } from '../api'
 import { Badge, Button, Card, EmptyState, fmtDate, IntentBadge, priorityTone, Spinner, StatusBadge } from '../components/ui'
+import { DiscussionPointRow } from '../components/discussion'
 
 const noteKindTone: Record<PersonNoteKind, string> = {
   feedback: 'violet',
@@ -27,6 +28,7 @@ interface PackItem {
 interface Pack {
   person: { id: number; name: string; role: string | null; team: string | null }
   generated: string
+  discussion_points: DiscussionPoint[]
   overdue: PackItem[]
   due_soon: PackItem[]
   later: PackItem[]
@@ -88,6 +90,7 @@ export default function OneToOnePack() {
   }
 
   const empty =
+    !pack.discussion_points.length &&
     !pack.overdue.length &&
     !pack.due_soon.length &&
     !pack.later.length &&
@@ -119,6 +122,19 @@ export default function OneToOnePack() {
       )}
 
       <div className="space-y-4">
+        {pack.discussion_points.length > 0 && (
+          <Card title={`To discuss (${pack.discussion_points.length})`}>
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {pack.discussion_points.map((point) => (
+                <DiscussionPointRow
+                  key={point.id}
+                  point={point}
+                  onChanged={() => queryClient.invalidateQueries({ queryKey: ['pack', id] })}
+                />
+              ))}
+            </div>
+          </Card>
+        )}
         {pack.waiting_on.length > 0 && (
           <Card title={`Waiting on them — chase now (${pack.waiting_on.length})`}>
             <ItemRows items={pack.waiting_on} showChase />

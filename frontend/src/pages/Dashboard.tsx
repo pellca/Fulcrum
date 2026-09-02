@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -5,15 +6,17 @@ import {
   AlarmClock,
   BellRing,
   CalendarClock,
+  CalendarDays,
   CheckCircle2,
   FileDown,
   Flag,
-  Landmark,
   Lightbulb,
+  MessageSquare,
   RotateCcw,
 } from 'lucide-react'
-import { api, type ChaseQueueItem, type DashboardSummary, type DashItem } from '../api'
-import { Badge, Button, Card, CapacityBar, EmptyState, fmtDate, fmtDateTime, PageHeader, priorityTone, Spinner, StatusBadge } from '../components/ui'
+import { api, createDiscussionPoint, type ChaseQueueItem, type DashboardSummary, type DashItem } from '../api'
+import { Badge, Button, Card, CapacityBar, cn, EmptyState, fmtDate, Input, PageHeader, priorityTone, Spinner, StatusBadge } from '../components/ui'
+import { DiscussionPointRow } from '../components/discussion'
 import { RiskChainsCard } from '../components/RiskChains'
 
 function exportPdf() {
@@ -137,6 +140,126 @@ function ChaseRow({ item }: { item: ChaseQueueItem }) {
   )
 }
 
+function DiscussionCard({ discussion }: { discussion: DashboardSummary['discussion'] }) {
+  const queryClient = useQueryClient()
+  const [title, setTitle] = useState('')
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+
+  const add = useMutation({
+    mutationFn: () => createDiscussionPoint({ person_id: discussion!.person.id, title: title.trim() }),
+    onSuccess: () => {
+      setTitle('')
+      invalidate()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  if (!discussion) return null
+
+  return (
+    <Card
+      title={
+        <span className="flex items-center gap-1.5">
+          <MessageSquare size={14} /> To discuss with {discussion.person.name} ({discussion.points.length})
+        </span>
+      }
+    >
+      <form
+        className="no-print mb-2 flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (title.trim()) add.mutate()
+        }}
+      >
+        <Input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder={`Add something to raise with ${discussion.person.name}…`}
+        />
+        <Button type="submit" size="sm" disabled={!title.trim() || add.isPending}>
+          Add
+        </Button>
+      </form>
+      {discussion.points.length === 0 ? (
+        <EmptyState title="Nothing queued up" hint="Add anything you need to raise on the next call." />
+      ) : (
+        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+          {discussion.points.map((point) => (
+            <DiscussionPointRow key={point.id} point={point} onChanged={invalidate} />
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function timeRange(entry: DashboardSummary['diary'][number]): string {
+  const span = entry.span_days > 1 ? ` · day ${entry.span_day} of ${entry.span_days}` : ''
+  if (entry.is_all_day) return `All day${span}`
+  if (entry.start_time && entry.end_time) return `${entry.start_time}–${entry.end_time}${span}`
+  return `${entry.start_time ?? ''}${span}`
+}
+
+function DiaryRow({ entry }: { entry: DashboardSummary['diary'][number] }) {
+  const { meeting } = entry
+  const body = (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          {meeting && <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: meeting.colour }} />}
+          <span className="truncate text-[13px] font-semibold">{entry.subject || '(no subject)'}</span>
+          {meeting?.needs_review && <Badge tone="amber">moved — review</Badge>}
+        </div>
+        {meeting && <StatusBadge status={meeting.status} />}
+      </div>
+      <div className="mt-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+        <span>
+          {timeRange(entry)}
+          {entry.location ? ` · ${entry.location}` : ''}
+          {entry.organizer ? ` · ${entry.organizer}` : ''}
+        </span>
+        {meeting && (
+          <span>
+            {meeting.agenda_count} items · {meeting.allocated_minutes}/{meeting.capacity_minutes} min
+          </span>
+        )}
+      </div>
+      {meeting && <CapacityBar allocated={meeting.allocated_minutes} capacity={meeting.capacity_minutes} size="sm" className="mt-1.5" />}
+    </>
+  )
+  const className = 'block rounded-lg border border-slate-100 p-3 transition-colors dark:border-slate-800'
+  return meeting ? (
+    <Link to={`/meetings/${meeting.id}`} className={cn(className, 'hover:border-indigo-300 dark:hover:border-indigo-700')}>
+      {body}
+    </Link>
+  ) : (
+    <div className={className}>{body}</div>
+  )
+}
+
+function TodaysDiaryCard({ diary, imported }: { diary: DashboardSummary['diary']; imported: boolean }) {
+  return (
+    <Card title={<span className="flex items-center gap-1.5"><CalendarDays size={14} /> Today's diary</span>}>
+      {diary.length === 0 ? (
+        imported ? (
+          <EmptyState title="Nothing in the diary today" />
+        ) : (
+          <EmptyState
+            title="No diary imported yet"
+            hint="Import diary.json from the Diary page to see today's schedule here."
+          />
+        )
+      ) : (
+        <div className="space-y-2.5">
+          {diary.map((entry) => (
+            <DiaryRow key={entry.id} entry={entry} />
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
+
 export default function Dashboard() {
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard'],
@@ -177,6 +300,7 @@ export default function Dashboard() {
 
       <div className="grid gap-4 xl:grid-cols-2 print:grid-cols-2 print:gap-3">
         <div className="space-y-4">
+          <DiscussionCard discussion={data.discussion} />
           {data.decisions_for_review.length > 0 && (
             <Card title={<span className="flex items-center gap-1.5"><RotateCcw size={14} /> Decisions due for revisit</span>}>
               <div className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -224,33 +348,7 @@ export default function Dashboard() {
         </div>
 
         <div className="space-y-4">
-          <Card title={<span className="flex items-center gap-1.5"><Landmark size={14} /> Upcoming meetings</span>}>
-            {data.meetings.length === 0 ? (
-              <EmptyState title="No meetings in the next fortnight" hint="Create forums and meetings from the Meetings page." />
-            ) : (
-              <div className="space-y-2.5">
-                {data.meetings.map((m) => (
-                  <Link key={m.id} to={`/meetings/${m.id}`} className="block rounded-lg border border-slate-100 p-3 transition-colors hover:border-indigo-300 dark:border-slate-800 dark:hover:border-indigo-700">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="h-2.5 w-2.5 rounded-full" style={{ background: m.colour }} />
-                        <span className="text-[13px] font-semibold">{m.forum}</span>
-                        {m.needs_review && <Badge tone="amber">moved — review</Badge>}
-                      </div>
-                      <StatusBadge status={m.status} />
-                    </div>
-                    <div className="mt-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                      <span>{fmtDateTime(m.scheduled_at)}</span>
-                      <span>
-                        {m.agenda_count} items · {m.allocated_minutes}/{m.capacity_minutes} min
-                      </span>
-                    </div>
-                    <CapacityBar allocated={m.allocated_minutes} capacity={m.capacity_minutes} size="sm" className="mt-1.5" />
-                  </Link>
-                ))}
-              </div>
-            )}
-          </Card>
+          <TodaysDiaryCard diary={data.diary} imported={data.diary_imported} />
 
           <Card title={<span className="flex items-center gap-1.5"><Flag size={14} /> Key dates — next 30 days</span>}>
             {data.key_dates.length === 0 ? (

@@ -8,10 +8,12 @@ from ..models import (
     Action,
     Commitment,
     Decision,
+    DiscussionPoint,
     KeyDate,
     Link,
     MailMessage,
     Meeting,
+    Person,
     PersonNote,
     Topic,
     Workstream,
@@ -29,6 +31,8 @@ TITLE_RESOLVERS = {
     "meeting": (Meeting, lambda r: f"{r.forum.name} — {r.scheduled_at:%d %b %Y}"),
     "mail": (MailMessage, lambda r: r.subject or f"mail #{r.id}"),
     "person_note": (PersonNote, lambda r: r.note[:60]),
+    "person": (Person, lambda r: r.name),
+    "discussion_point": (DiscussionPoint, lambda r: r.title),
 }
 
 

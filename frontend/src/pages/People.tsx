@@ -172,8 +172,11 @@ function PeopleTable() {
                   </span>
                 </td>
                 <td className="px-3 py-2.5">
-                  {person.is_bpm && <Badge tone="indigo">BPM</Badge>}
-                  {!person.active && <Badge tone="slate">inactive</Badge>}
+                  <span className="flex flex-wrap gap-1">
+                    {person.is_bpm && <Badge tone="indigo">BPM</Badge>}
+                    {person.pin_discussion && <Badge tone="violet">Pinned to Today</Badge>}
+                    {!person.active && <Badge tone="slate">inactive</Badge>}
+                  </span>
                 </td>
                 <td className="px-3 py-2.5 text-right whitespace-nowrap">
                   <Link to={`/people/${person.id}/pack`}>
@@ -482,19 +485,23 @@ function PersonModal({ person, onClose }: { person?: Person; onClose: () => void
     team: person?.team ?? '',
     role: person?.role ?? '',
     is_bpm: person?.is_bpm ? 'true' : 'false',
+    pin_discussion: person?.pin_discussion ? 'true' : 'false',
   })
   const set = (key: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }))
 
   const save = useMutation({
     mutationFn: () => {
-      const body = {
+      const body: Record<string, unknown> = {
         name: form.name,
         email: form.email || null,
         team: form.team || null,
         role: form.role || null,
         is_bpm: form.is_bpm === 'true',
       }
+      // only meaningful on an existing person — pinning is enforced exclusive
+      // by the PATCH endpoint, which a fresh person never goes through here
+      if (person) body.pin_discussion = form.pin_discussion === 'true'
       return person ? api.patch(`/people/${person.id}`, body) : api.post('/people', body)
     },
     onSuccess: () => {
@@ -527,6 +534,14 @@ function PersonModal({ person, onClose }: { person?: Person; onClose: () => void
               <option value="true">Yes</option>
             </Select>
           </Field>
+          {person && (
+            <Field label="Pin their list to Today">
+              <Select value={form.pin_discussion} onChange={set('pin_discussion')}>
+                <option value="false">No</option>
+                <option value="true">Yes</option>
+              </Select>
+            </Field>
+          )}
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>

@@ -28,6 +28,7 @@ DEMO_TABLES = [
     "key_date",
     "workstream",
     "person_note",
+    "discussion_point",
     "person",
 ]
 

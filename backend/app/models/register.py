@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import Date, ForeignKey, Index, String, Text
+from sqlalchemy import Date, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db import Base
@@ -78,6 +78,43 @@ class Chase(Base, TimestampMixin):
 
     action: Mapped[Optional[Action]] = relationship(back_populates="chases")
     commitment: Mapped[Optional[Commitment]] = relationship()
+
+
+class DiscussionPoint(Base, TimestampMixin, DemoMixin):
+    """Something to raise with one person on the next call.
+
+    Deliberately not an Action (nobody owes work), a Commitment (nothing was
+    promised) or a PersonNote (that records an observation *about* someone, not
+    an item *for* a conversation). What it points at, if anything, is a Link
+    edge rather than a column, so one point can reference an action, a
+    commitment and a person at once — or nothing at all, which is the common
+    case for "ask Paul about the headcount freeze".
+
+    `last_discussed_on` and `status` are separate on purpose: covering a point
+    is not the same event as being finished with it. A standing item gets
+    stamped every week and never closes; a one-off is raised once and closed.
+    Keeping them apart is what lets the list sort stalest-first.
+    """
+
+    __tablename__ = "discussion_point"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # the list this belongs to; CASCADE because the point has no meaning without
+    # the person (delete_entities warns before it happens — see bulk.py)
+    person_id: Mapped[int] = mapped_column(ForeignKey("person.id", ondelete="CASCADE"))
+    title: Mapped[str] = mapped_column(String(300))
+    detail: Mapped[Optional[str]] = mapped_column(Text)
+    # high | medium | low
+    priority: Mapped[str] = mapped_column(String(10), default="medium")
+    # open | closed
+    status: Mapped[str] = mapped_column(String(20), default="open")
+    raised_on: Mapped[date] = mapped_column(Date)
+    last_discussed_on: Mapped[Optional[date]] = mapped_column(Date)
+    times_discussed: Mapped[int] = mapped_column(Integer, default=0)
+    closed_on: Mapped[Optional[date]] = mapped_column(Date)
+    outcome: Mapped[Optional[str]] = mapped_column(Text)
+
+    person: Mapped[Person] = relationship()
 
 
 class Link(Base, TimestampMixin):

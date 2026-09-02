@@ -46,6 +46,7 @@ export interface Person extends PersonMini {
   role: string | null
   is_bpm: boolean
   active: boolean
+  pin_discussion: boolean
   notes: string | null
   aliases: { id: number; alias: string }[]
 }
@@ -86,6 +87,60 @@ export function deletePersonNote(noteId: number) {
 
 export function markNotesDiscussed(personId: number, ids?: number[]) {
   return api.post<{ marked: number }>(`/people/${personId}/notes/mark-discussed`, ids ? { ids } : undefined)
+}
+
+// ---------- discussion points ----------
+
+export interface DiscussionLink {
+  type: string
+  id: number
+  title: string
+}
+
+export interface DiscussionPoint {
+  id: number
+  person_id: number
+  title: string
+  detail: string | null
+  priority: string
+  status: 'open' | 'closed'
+  raised_on: string
+  last_discussed_on: string | null
+  times_discussed: number
+  closed_on: string | null
+  outcome: string | null
+  links: DiscussionLink[]
+}
+
+export function listDiscussionPoints(personId: number, includeClosed = false) {
+  const search = new URLSearchParams({ person_id: String(personId) })
+  if (includeClosed) search.set('include_closed', 'true')
+  return api.get<DiscussionPoint[]>(`/discussion-points?${search.toString()}`)
+}
+
+export function createDiscussionPoint(body: {
+  person_id: number
+  title: string
+  detail?: string | null
+  priority?: string
+  link_to?: { type: string; id: number }
+}) {
+  return api.post<DiscussionPoint>('/discussion-points', body)
+}
+
+export function updateDiscussionPoint(
+  id: number,
+  body: Partial<Pick<DiscussionPoint, 'title' | 'detail' | 'priority' | 'status' | 'outcome'>>,
+) {
+  return api.patch<DiscussionPoint>(`/discussion-points/${id}`, body)
+}
+
+export function markDiscussionPointDiscussed(id: number) {
+  return api.post<DiscussionPoint>(`/discussion-points/${id}/discussed`)
+}
+
+export function deleteDiscussionPoint(id: number) {
+  return api.delete(`/discussion-points/${id}`)
 }
 
 export interface WorkstreamMini {
@@ -283,6 +338,7 @@ export interface ModuleRun {
 
 export interface DashboardSummary {
   today: string
+  discussion: { person: PersonMini; points: DiscussionPoint[] } | null
   decisions_for_review: {
     id: number
     title: string
@@ -304,6 +360,7 @@ export interface DashboardSummary {
     target_by: string | null
     duration_minutes: number
   }[]
+  diary_imported: boolean
   key_dates: {
     id: number
     title: string
@@ -313,16 +370,26 @@ export interface DashboardSummary {
     days_away: number
     workstream: string | null
   }[]
-  meetings: {
-    id: number
-    forum: string
-    colour: string
-    scheduled_at: string
-    status: string
-    needs_review: boolean
-    agenda_count: number
-    allocated_minutes: number
-    capacity_minutes: number
+  diary: {
+    id: string
+    subject: string | null
+    start_time: string | null
+    end_time: string | null
+    is_all_day: boolean
+    location: string | null
+    organizer: string | null
+    span_day: number
+    span_days: number
+    meeting: {
+      id: number
+      forum: string
+      colour: string
+      status: string
+      needs_review: boolean
+      agenda_count: number
+      allocated_minutes: number
+      capacity_minutes: number
+    } | null
   }[]
 }
 
@@ -528,7 +595,8 @@ export interface TimelineData {
       priority: string
       owner: string | null
     }[]
-    key_dates: { id: number; title: string; date: string; kind: string; hard: boolean }[]
+    diary_imported: boolean
+  key_dates: { id: number; title: string; date: string; kind: string; hard: boolean }[]
   }[]
   meetings: { id: number; forum: string; colour: string; scheduled_at: string; status: string }[]
 }

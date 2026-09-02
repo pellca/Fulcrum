@@ -124,6 +124,8 @@ const LINKABLE: { value: string; label: string; endpoint: string; titleKey: stri
   { value: 'topic', label: 'Topic', endpoint: '/topics', titleKey: 'title' },
   { value: 'key_date', label: 'Key date', endpoint: '/key-dates', titleKey: 'title' },
   { value: 'workstream', label: 'Workstream', endpoint: '/workstreams', titleKey: 'name' },
+  { value: 'discussion_point', label: 'Discussion point', endpoint: '/discussion-points', titleKey: 'title' },
+  { value: 'person', label: 'Person', endpoint: '/people', titleKey: 'name' },
 ]
 
 const KIND_LABEL: Record<string, string> = {

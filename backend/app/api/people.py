@@ -17,6 +17,7 @@ from ..schemas import (
 )
 from ..services.bulk import check_references, delete_entities
 from ..services.chase import latest_chase_map
+from ..services.discussion import discussion_list
 
 router = APIRouter(prefix="/people", tags=["people"])
 
@@ -42,7 +43,14 @@ def update_person(person_id: int, body: PersonPatch, db: Session = Depends(get_d
     person = db.get(Person, person_id)
     if not person:
         raise HTTPException(404)
-    for key, value in body.model_dump(exclude_unset=True).items():
+    updates = body.model_dump(exclude_unset=True)
+    if updates.get("pin_discussion"):
+        # at most one pinned list, ever — enforced here rather than in the
+        # schema since it's a cross-row invariant
+        db.query(Person).filter(Person.id != person_id, Person.pin_discussion.is_(True)).update(
+            {"pin_discussion": False}, synchronize_session=False
+        )
+    for key, value in updates.items():
         setattr(person, key, value)
     db.commit()
     return person
@@ -143,6 +151,7 @@ def one_to_one_pack(person_id: int, db: Session = Depends(get_db)):
             "team": person.team,
         },
         "generated": today.isoformat(),
+        "discussion_points": discussion_list(db, person_id),
         "overdue": sorted(overdue, key=lambda i: i["due_date"]),
         "due_soon": sorted(due_soon, key=lambda i: i["due_date"]),
         "later": later,
